@@ -1,0 +1,1263 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
+
+:root{
+  --ink:#20231f; --paper:#e9e7dd; --paper-raised:#f2f0e6; --rule:#c7c3b3; --rule-soft:#d8d5c7;
+  --brass:#b0793a; --teal:#33606a; --rust:#a4463b; --muted:#7a7869; --muted-2:#948f7c;
+}
+*{box-sizing:border-box;}
+.tk-root{font-family:'Inter',sans-serif;background:transparent;color:var(--ink);min-height:100vh;}
+.tk-app{max-width:1220px;margin:0 auto;background:var(--paper);border:1px solid var(--rule);min-height:640px;display:flex;flex-direction:column;}
+.tk-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid var(--rule);background:var(--paper-raised);}
+.tk-title{font-family:'Fraunces',serif;font-size:22px;font-weight:600;letter-spacing:-0.01em;display:flex;align-items:baseline;gap:10px;}
+.tk-title .tk-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:0.04em;text-transform:uppercase;}
+.tk-user-wrap{display:flex;align-items:center;gap:10px;}
+.tk-user-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;}
+select.tk-select, .tk-btn, input.tk-input, textarea.tk-textarea, input.tk-date{
+  font-family:'Inter',sans-serif;font-size:13px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);padding:7px 10px;border-radius:2px;
+}
+select.tk-select{cursor:pointer;}
+.tk-btn{cursor:pointer;background:var(--ink);color:var(--paper);border:1px solid var(--ink);font-weight:500;transition:opacity .15s;}
+.tk-btn:hover{opacity:0.82;}
+.tk-btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--rule);}
+.tk-btn.ghost:hover{background:var(--paper-raised);opacity:1;}
+.tk-btn.small{padding:4px 8px;font-size:11px;}
+.tk-btn.danger{background:var(--rust);border-color:var(--rust);}
+.tk-btn.full{width:100%;}
+.tk-tabs{display:flex;gap:2px;padding:0 24px;border-bottom:1px solid var(--rule);background:var(--paper);flex-wrap:wrap;}
+.tk-tab{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:0.04em;text-transform:uppercase;padding:11px 4px;margin-right:22px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;user-select:none;}
+.tk-tab.active{color:var(--ink);border-bottom-color:var(--brass);}
+.tk-content-row{flex:1;display:flex;min-height:0;}
+.tk-sidebar{flex:0 0 210px;border-right:1px solid var(--rule);padding:18px 14px;background:var(--paper-raised);}
+.tk-sidebar-label{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:10px;}
+.tk-sidebar-item{display:flex;align-items:center;gap:7px;padding:6px 4px;cursor:pointer;font-size:12.5px;border-radius:2px;}
+.tk-sidebar-item:hover{background:var(--paper);}
+.tk-dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px;}
+.tk-dot.active{background:var(--teal);}
+.tk-dot.waiting{background:var(--brass);}
+.tk-dot.done{background:var(--muted-2);}
+.tk-body{flex:1;padding:22px 24px 40px;overflow-x:hidden;}
+.tk-quicklog{display:flex;gap:8px;align-items:center;margin-bottom:26px;padding:12px 14px;background:var(--paper-raised);border:1px solid var(--rule-soft);}
+.tk-quicklog select{flex:0 0 180px;}
+.tk-quicklog input{flex:1;}
+.tk-section-label{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--rule-soft);display:flex;justify-content:space-between;align-items:center;}
+.tk-action-row{display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-bottom:1px solid var(--rule-soft);}
+.tk-action-row:last-child{border-bottom:none;}
+.tk-check{width:16px;height:16px;border:1.5px solid var(--muted-2);border-radius:2px;flex:0 0 16px;margin-top:2px;cursor:pointer;background:var(--paper);position:relative;}
+.tk-check.done{background:var(--teal);border-color:var(--teal);}
+.tk-check.done::after{content:'';position:absolute;left:4px;top:1px;width:5px;height:9px;border-right:2px solid var(--paper);border-bottom:2px solid var(--paper);transform:rotate(40deg);}
+.tk-action-text{font-size:13.5px;line-height:1.4;}
+.tk-action-proj{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--brass);text-transform:uppercase;letter-spacing:0.04em;margin-right:8px;cursor:pointer;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:2px;}
+.tk-action-assignee{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--teal);margin-left:8px;}
+.tk-action-due{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--rust);margin-left:8px;}
+.tk-empty{color:var(--muted);font-size:13px;font-style:italic;padding:10px 4px;}
+.tk-two-col{display:grid;grid-template-columns:1.15fr 0.85fr;gap:32px;}
+@media (max-width:800px){.tk-two-col{grid-template-columns:1fr;}}
+.tk-ledger-entry{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--rule-soft);}
+.tk-stamp{flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.03em;border:1.5px solid var(--brass);color:var(--brass);padding:3px 6px;border-radius:3px;white-space:nowrap;height:fit-content;transform:rotate(var(--tilt,-2deg));text-transform:uppercase;}
+.tk-stamp.system{border-color:var(--teal);color:var(--teal);}
+.tk-ledger-text{font-size:13px;line-height:1.45;}
+.tk-ledger-meta{font-size:10.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+.tk-board{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+@media (max-width:800px){.tk-board{grid-template-columns:1fr;}}
+.tk-col-head{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+.tk-card{background:var(--paper-raised);border:1px solid var(--rule);padding:12px 14px;margin-bottom:12px;cursor:pointer;transition:border-color .15s;}
+.tk-card:hover{border-color:var(--brass);}
+.tk-card-title{font-family:'Fraunces',serif;font-size:15.5px;font-weight:600;margin-bottom:5px;}
+.tk-card-meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.03em;}
+.tk-card-last{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;}
+.tk-card-open{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--brass);margin-top:8px;}
+.tk-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:var(--paper);border:1px solid var(--rule);padding:3px 8px;border-radius:12px;margin:0 6px 6px 0;}
+.tk-chip .x{cursor:pointer;color:var(--muted);font-weight:600;}
+.tk-chip .x:hover{color:var(--rust);}
+.tk-chip-add{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+.tk-chip-choice{font-size:11px;padding:3px 8px;border:1px dashed var(--rule);border-radius:12px;cursor:pointer;color:var(--muted);}
+.tk-chip-choice:hover{border-color:var(--brass);color:var(--brass);}
+.tk-param-row{display:flex;gap:6px;margin-bottom:6px;align-items:center;}
+.tk-param-row input{flex:1;font-size:12.5px;}
+.tk-param-row .rm{cursor:pointer;color:var(--muted);font-size:14px;padding:0 4px;}
+.tk-param-row .rm:hover{color:var(--rust);}
+.tk-brief-box{background:var(--paper-raised);border:1px solid var(--rule-soft);padding:12px;white-space:pre-wrap;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;max-height:280px;overflow-y:auto;}
+.tk-copied{font-size:11px;color:var(--teal);font-family:'IBM Plex Mono',monospace;margin-left:8px;}
+.tk-res-group{margin-bottom:20px;}
+.tk-res-row{display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--rule-soft);gap:10px;}
+.tk-res-name{font-size:13.5px;font-weight:600;}
+.tk-res-detail{font-size:12px;color:var(--muted);margin-top:2px;}
+.tk-res-used{font-size:10.5px;color:var(--muted-2);font-family:'IBM Plex Mono',monospace;margin-top:4px;}
+.tk-overlay{position:fixed;inset:0;background:rgba(20,20,15,0.35);display:flex;justify-content:flex-end;z-index:50;}
+.tk-panel{width:min(560px,94vw);background:var(--paper);height:100%;overflow-y:auto;padding:22px 24px 60px;border-left:1px solid var(--rule);}
+.tk-panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;}
+.tk-panel-title{font-family:'Fraunces',serif;font-size:22px;font-weight:600;}
+.tk-close{cursor:pointer;font-size:20px;color:var(--muted);background:none;border:none;line-height:1;padding:2px 6px;}
+.tk-close:hover{color:var(--ink);}
+.tk-status-row{display:flex;gap:8px;align-items:center;margin:10px 0 22px;}
+.tk-step-row{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px solid var(--rule-soft);}
+.tk-step-text{font-size:13.5px;flex:1;}
+.tk-step-text.done{color:var(--muted);text-decoration:line-through;}
+.tk-step-meta{font-size:10px;color:var(--muted-2);font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+.tk-step-inline{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;}
+.tk-step-inline input{font-size:11px;padding:3px 6px;width:110px;}
+.tk-step-inline input.tk-date{width:126px;}
+.tk-addstep{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+.tk-addstep input.tk-input{flex:1;min-width:140px;}
+.tk-addstep input.tk-assignee{flex:0 0 110px;}
+.tk-addstep input.tk-date{flex:0 0 130px;}
+.tk-add-update{display:flex;flex-direction:column;gap:8px;margin:14px 0 20px;}
+.tk-add-update textarea{min-height:56px;resize:vertical;}
+.tk-note{font-size:11.5px;color:var(--muted);line-height:1.5;border-left:2px solid var(--rule);padding-left:10px;margin-top:24px;}
+.tk-modal{position:fixed;inset:0;background:rgba(20,20,15,0.35);display:flex;align-items:center;justify-content:center;z-index:60;padding:20px;}
+.tk-modal-box{background:var(--paper);border:1px solid var(--rule);padding:20px 22px;width:min(460px,94vw);max-height:88vh;overflow-y:auto;}
+.tk-modal-box.wide{width:min(560px,94vw);}
+.tk-modal-box h3{font-family:'Fraunces',serif;margin:0 0 12px;font-size:17px;}
+.tk-modal-box .tk-field{margin-bottom:14px;display:flex;flex-direction:column;gap:5px;}
+.tk-modal-box label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;color:var(--muted);letter-spacing:0.04em;}
+.tk-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
+.tk-loading{padding:60px 24px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+textarea.tk-textarea{width:100%;font-family:inherit;}
+.tk-cal-group{margin-bottom:26px;}
+.tk-cal-group.overdue .tk-section-label{color:var(--rust);}
+.tk-cal-filter{display:flex;gap:8px;align-items:center;margin-bottom:20px;}
+.tk-mbx-badge{font-family:'IBM Plex Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.03em;color:var(--teal);border:1px solid var(--teal);padding:2px 6px;border-radius:10px;margin-left:6px;}
+.tk-mbx-badge.warn{color:var(--rust);border-color:var(--rust);}
+</style>
+
+<div id="tk-mount" class="tk-root"><div class="tk-loading">loading ledger…</div></div>
+
+<script>
+(function(){
+
+const DEFAULT_USERS = ['You'];
+// Update this once the mailbox ingestion backend is chosen — shown as a small note under Mailboxes.
+const INGESTION_SYSTEM_LABEL = 'system to be decided';
+const RESOURCE_TYPES = [
+  {key:'mailbox', label:'Mailbox', plural:'Mailboxes'},
+  {key:'guideline', label:'Guideline', plural:'Guidelines'},
+  {key:'date', label:'Key date', plural:'Key dates'},
+  {key:'other', label:'Other', plural:'Other'}
+];
+
+// ---------------------------------------------------------------------------
+// Supabase wiring — this file talks to the real `organiser` project directly.
+// The publishable key is safe to embed client-side by design (Supabase's
+// equivalent of the old "anon key") — actual access control is enforced by
+// Row Level Security policies on the database side, not by keeping this
+// value secret. Never put the sb_secret_... key here.
+// ---------------------------------------------------------------------------
+const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
+
+async function sbFetch(path, options={}){
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json',
+    ...(options.headers||{})
+  };
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {...options, headers});
+  if(!res.ok){
+    let errText = '';
+    try{ errText = await res.text(); }catch(e){}
+    throw new Error('Supabase ' + res.status + ': ' + errText);
+  }
+  if(res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+function sbSelect(table, query=''){ return sbFetch(table + (query ? '?' + query : '')); }
+function sbInsert(table, rows){
+  return sbFetch(table, { method:'POST', headers:{'Prefer':'return=representation'}, body: JSON.stringify(rows) });
+}
+function sbUpdate(table, query, patch){
+  return sbFetch(table + '?' + query, { method:'PATCH', headers:{'Prefer':'return=representation'}, body: JSON.stringify(patch) });
+}
+function sbDelete(table, query){
+  return sbFetch(table + '?' + query, { method:'DELETE' });
+}
+
+// Seed content — inserted into Supabase automatically on first run only
+// (when the `projects` table is empty), so the live app starts with the
+// same real projects already being tracked instead of an empty board.
+const SEED_RESOURCES = [
+  {type:'mailbox', name:'ops@yourcompany.com', detail:'Shared inbox — MedCore + vendor invoices land here'},
+  {type:'guideline', name:'MedCore data handling policy', detail:'No PHI leaves the shared Supabase project; anonymise before export'},
+  {type:'date', name:'Q3 close', detail:'Sept 30 — invoices + finance rollups due'}
+];
+const SEED_PROJECTS = [
+  {
+    key:'medcore', name:'MedCore Integration', status:'active',
+    params:[{key:'Counterparty',value:'MedCore Health'},{key:'Deadline',value:'Phase 2 sign-off, end of month'}],
+    linkKeys:['ops-dashboard'], resourceNames:['ops@yourcompany.com','MedCore data handling policy'],
+    steps:[
+      {text:'Confirm data mapping with MedCore eng lead', done:true, doneBy:'You'},
+      {text:'Set up Supabase schema for shared tables', done:true, doneBy:'You'},
+      {text:'Send updated integration timeline to MedCore', done:false},
+      {text:'Get sign-off on the auth flow', done:false, statusNote:'Pending ABR login for MedCore side', contextTag:'When Phillip is in the office'}
+    ]
+  },
+  {
+    key:'ops-dashboard', name:'Email Triage & Ops Dashboard', status:'active',
+    params:[{key:'Stack',value:'Supabase + Gmail API'}],
+    linkKeys:['medcore'], resourceNames:['ops@yourcompany.com'],
+    steps:[
+      {text:'Register Google Cloud project + OAuth client', done:true, doneBy:'You'},
+      {text:'Get consent from each mailbox owner', done:true, doneBy:'You'},
+      {text:'Stand up accounts/messages/projects/invoices schema', done:true, doneBy:'You'},
+      {text:'Wire the dashboard to Supabase', done:true, doneBy:'You'},
+      {text:'Write the Gmail OAuth callback + polling Edge Function', done:false}
+    ]
+  },
+  {
+    key:'domain-xxx', name:'Project XXX — Domain & Launch', status:'waiting',
+    params:[{key:'Domain',value:'projectxxx.com'}],
+    linkKeys:[], resourceNames:['Q3 close'],
+    steps:[
+      {text:'Register domain name', done:true, doneBy:'You'},
+      {text:'Point DNS to hosting', done:false},
+      {text:'Draft launch email to list', done:false}
+    ]
+  },
+  {
+    key:'rentvault', name:'RentVault', status:'active',
+    params:[{key:'Integration partner',value:'Safaricom'}],
+    linkKeys:[], resourceNames:[],
+    steps:[
+      {text:"Follow up on Safaricom integration — work out why it still isn't working", done:false, assignee:'Emma', dueDate:'2026-07-10', instructions:'Check the API keys are current and confirm the callback URL matches what Safaricom has on file.'}
+    ]
+  }
+];
+const SEED_UPDATE_TEXT = {
+  'domain-xxx': 'Registered the domain name for Project XXX.',
+  'medcore': 'Supabase schema is live — waiting on MedCore to test against it.',
+  'ops-dashboard': 'Dashboard is now wired to the real organiser Supabase project.',
+  'rentvault': "Added RentVault. Emma to follow up on Safaricom integration and find out why it isn't working — due end of week."
+};
+const SEED_USERS = ['You','Emma'];
+
+let state = {
+  projects: [], updates: [], resources: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
+  tab: 'today', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
+  showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
+  reconnectingId: null,
+  justCopied: false, loadError: null
+};
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function lsGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+function lsSet(key, val){ try{ localStorage.setItem(key, val); }catch(e){} }
+
+async function seedIfEmpty(){
+  const existing = await sbSelect('projects', 'select=id&limit=1');
+  if(existing && existing.length) return;
+
+  const projectIdByKey = {};
+  const resourceIdByName = {};
+
+  for(const r of SEED_RESOURCES){
+    const [row] = await sbInsert('resources', [{type:r.type, name:r.name, detail:r.detail}]);
+    resourceIdByName[r.name] = row.id;
+    if(r.type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, status:'connected', last_checked: new Date(Date.now()-1000*60*60*3).toISOString()}]);
+  }
+
+  for(const p of SEED_PROJECTS){
+    const [row] = await sbInsert('projects', [{name:p.name, status:p.status}]);
+    projectIdByKey[p.key] = row.id;
+    if(p.params.length) await sbInsert('project_params', p.params.map(pr=>({project_id:row.id, key:pr.key, value:pr.value})));
+    for(const rn of p.resourceNames){
+      const rid = resourceIdByName[rn];
+      if(rid) await sbInsert('project_resources', [{project_id:row.id, resource_id:rid}]);
+    }
+    const taskRows = p.steps.map(s=>({
+      project_id: row.id, text:s.text, done: !!s.done,
+      done_by: s.done ? (s.doneBy||'You') : null,
+      done_at: s.done ? new Date().toISOString() : null,
+      assignee: s.assignee||null, due_date: s.dueDate||null,
+      instructions: s.instructions||null, status_note: s.statusNote||null, context_tag: s.contextTag||null
+    }));
+    if(taskRows.length) await sbInsert('tasks', taskRows);
+    if(SEED_UPDATE_TEXT[p.key]) await sbInsert('updates', [{project_id: row.id, type:'manual', text: SEED_UPDATE_TEXT[p.key], user_name:'You'}]);
+  }
+
+  for(const p of SEED_PROJECTS){
+    for(const lk of p.linkKeys){
+      const a = projectIdByKey[p.key], b = projectIdByKey[lk];
+      if(a && b) await sbInsert('project_links', [{project_id:a, linked_project_id:b}]);
+    }
+  }
+
+  for(const name of SEED_USERS){
+    await sbInsert('users', [{name}]).catch(()=>{});
+  }
+}
+
+async function loadAll(){
+  try{
+    await seedIfEmpty();
+
+    const [projectsRows, paramsRows, linksRows, resourcesRows, prRows, mbxRows, tasksRows, updatesRows, usersRows] = await Promise.all([
+      sbSelect('projects', 'select=*&order=created_at.asc'),
+      sbSelect('project_params', 'select=*'),
+      sbSelect('project_links', 'select=*'),
+      sbSelect('resources', 'select=*'),
+      sbSelect('project_resources', 'select=*'),
+      sbSelect('mailbox_connections', 'select=*'),
+      sbSelect('tasks', 'select=*&order=created_at.asc'),
+      sbSelect('updates', 'select=*&order=ts.desc'),
+      sbSelect('users', 'select=*&order=created_at.asc')
+    ]);
+
+    const mbxByResource = {};
+    (mbxRows||[]).forEach(m=> mbxByResource[m.resource_id] = m);
+    state.resources = (resourcesRows||[]).map(r=>{
+      const merged = {id:r.id, type:r.type, name:r.name, detail:r.detail};
+      if(r.type==='mailbox'){
+        const m = mbxByResource[r.id];
+        merged.status = m ? m.status : 'connected';
+        merged.lastChecked = m && m.last_checked ? new Date(m.last_checked).getTime() : null;
+      }
+      return merged;
+    });
+
+    state.updates = (updatesRows||[]).map(u=>({id:u.id, projectId:u.project_id, type:u.type, text:u.text, user:u.user_name, ts: new Date(u.ts).getTime()}));
+
+    state.users = (usersRows||[]).map(u=>u.name);
+    if(!state.users.length) state.users = DEFAULT_USERS.slice();
+
+    const storedCurrentUser = lsGet('organiser-current-user');
+    state.currentUser = (storedCurrentUser && state.users.includes(storedCurrentUser)) ? storedCurrentUser : state.users[0];
+
+    state.projects = (projectsRows||[]).map(p=>{
+      const params = (paramsRows||[]).filter(x=>x.project_id===p.id).map(x=>({id:x.id, key:x.key||'', value:x.value||''}));
+      const links = (linksRows||[]).filter(x=>x.project_id===p.id).map(x=>x.linked_project_id);
+      const resourceIds = (prRows||[]).filter(x=>x.project_id===p.id).map(x=>x.resource_id);
+      const steps = (tasksRows||[]).filter(x=>x.project_id===p.id).map(x=>({
+        id:x.id, text:x.text, done:x.done, doneBy:x.done_by, doneAt: x.done_at ? new Date(x.done_at).getTime() : null,
+        assignee:x.assignee||'', dueDate:x.due_date||'', instructions:x.instructions||'', statusNote:x.status_note||'', contextTag:x.context_tag||''
+      }));
+      return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps};
+    });
+
+    state.loadError = null;
+  }catch(e){
+    console.error('Failed to load from Supabase', e);
+    state.loadError = e.message || String(e);
+  }
+  render();
+}
+
+function persistCurrentUser(){ lsSet('organiser-current-user', state.currentUser); }
+
+function fmtTime(ts){
+  const d = new Date(ts); const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  if(sameDay) return 'today '+time;
+  const yest = new Date(now); yest.setDate(now.getDate()-1);
+  if(d.toDateString() === yest.toDateString()) return 'yest '+time;
+  return d.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + time;
+}
+function fmtDate(ts){ return new Date(ts).toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}); }
+function fmtDueDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso+'T00:00:00');
+  return d.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+}
+function initials(name){ return name.trim().split(/\s+/).map(w=>w[0]).join('').slice(0,3).toUpperCase(); }
+function tiltFor(id){ let h=0; for(const c of id) h+=c.charCodeAt(0); return ((h%5)-2)+'deg'; }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function resourceLabel(r){ return RESOURCE_TYPES.find(t=>t.key===r.type)?.label || r.type; }
+
+function startOfDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function startOfWeek(d){ const day=(d.getDay()+6)%7; const s=startOfDay(d); s.setDate(s.getDate()-day); return s; }
+function endOfWeek(d){ const s=startOfWeek(d); const e=new Date(s); e.setDate(s.getDate()+6); e.setHours(23,59,59,999); return e; }
+
+async function addUpdate(projectId, text, type, user){
+  if(!text || !text.trim()) return;
+  const local = {id:'tmp-'+uid(), projectId, type: type||'manual', text: text.trim(), user: user||state.currentUser, ts: Date.now()};
+  state.updates.unshift(local);
+  render();
+  try{
+    const [row] = await sbInsert('updates', [{project_id:projectId, type:local.type, text:local.text, user_name:local.user}]);
+    local.id = row.id; local.ts = new Date(row.ts).getTime();
+  }catch(e){ console.error('addUpdate failed', e); }
+}
+
+async function markStep(projectId, stepId, done){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const s = p.steps.find(s=>s.id===stepId); if(!s) return;
+  s.done = done;
+  const patch = { done };
+  if(done){ s.doneBy = state.currentUser; s.doneAt = Date.now(); patch.done_by = state.currentUser; patch.done_at = new Date(s.doneAt).toISOString(); }
+  else { s.doneBy = null; s.doneAt = null; patch.done_by = null; patch.done_at = null; }
+  render();
+  addUpdate(projectId, (done?'Marked done: ':'Reopened: ')+s.text, 'manual', state.currentUser);
+  try{ await sbUpdate('tasks', 'id=eq.'+stepId, patch); }catch(e){ console.error('markStep failed', e); }
+}
+async function addStep(projectId, text, assignee, dueDate){
+  if(!text || !text.trim()) return;
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const local = {id:'tmp-'+uid(), text:text.trim(), done:false, assignee:(assignee||'').trim(), dueDate:dueDate||'', instructions:'', statusNote:'', contextTag:''};
+  p.steps.push(local); render();
+  try{
+    const [row] = await sbInsert('tasks', [{project_id:projectId, text:local.text, assignee: local.assignee||null, due_date: local.dueDate||null}]);
+    local.id = row.id;
+  }catch(e){ console.error('addStep failed', e); }
+}
+function updateStepField(projectId, stepId, field, value){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const s = p.steps.find(x=>x.id===stepId); if(!s) return;
+  s[field] = value;
+  const colMap = {assignee:'assignee', dueDate:'due_date', instructions:'instructions', statusNote:'status_note', contextTag:'context_tag'};
+  const col = colMap[field]; if(!col) return;
+  sbUpdate('tasks', 'id=eq.'+stepId, {[col]: value || null}).catch(e=> console.error('updateStepField failed', e));
+}
+async function addParam(projectId){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const local = {id:'tmp-'+uid(), key:'', value:''};
+  p.params.push(local); render();
+  try{
+    const [row] = await sbInsert('project_params', [{project_id:projectId, key:'', value:''}]);
+    local.id = row.id;
+  }catch(e){ console.error('addParam failed', e); }
+}
+function updateParam(projectId, paramId, field, value){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const pr = p.params.find(x=>x.id===paramId); if(!pr) return;
+  pr[field] = value;
+  sbUpdate('project_params', 'id=eq.'+paramId, {[field]: value}).catch(e=> console.error('updateParam failed', e));
+}
+function removeParam(projectId, paramId){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  p.params = p.params.filter(x=>x.id!==paramId); render();
+  sbDelete('project_params', 'id=eq.'+paramId).catch(e=> console.error('removeParam failed', e));
+}
+function toggleLink(projectId, otherId){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const linked = p.links.includes(otherId);
+  if(linked){
+    p.links = p.links.filter(x=>x!==otherId);
+    const op = state.projects.find(x=>x.id===otherId); if(op) op.links = op.links.filter(x=>x!==projectId);
+    sbDelete('project_links', 'or=(and(project_id.eq.'+projectId+',linked_project_id.eq.'+otherId+'),and(project_id.eq.'+otherId+',linked_project_id.eq.'+projectId+'))').catch(e=> console.error('unlink failed', e));
+  } else {
+    p.links.push(otherId);
+    const op = state.projects.find(x=>x.id===otherId); if(op) op.links.push(projectId);
+    sbInsert('project_links', [{project_id:projectId, linked_project_id:otherId},{project_id:otherId, linked_project_id:projectId}]).catch(e=> console.error('link failed', e));
+  }
+  render();
+}
+function toggleResource(projectId, resId){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const linked = p.resourceIds.includes(resId);
+  if(linked){
+    p.resourceIds = p.resourceIds.filter(x=>x!==resId);
+    sbDelete('project_resources', 'project_id=eq.'+projectId+'&resource_id=eq.'+resId).catch(e=> console.error('unresource failed', e));
+  } else {
+    p.resourceIds.push(resId);
+    sbInsert('project_resources', [{project_id:projectId, resource_id:resId}]).catch(e=> console.error('resource link failed', e));
+  }
+  render();
+}
+async function createProject(name, stepLines, status, linkIds, resIds){
+  const stepTexts = stepLines.split('\n').map(l=>l.trim()).filter(Boolean);
+  state.showNewProject = false; render();
+  try{
+    const [row] = await sbInsert('projects', [{name: name.trim(), status: status||'active'}]);
+    const id = row.id;
+    const steps = [];
+    if(stepTexts.length){
+      const inserted = await sbInsert('tasks', stepTexts.map(t=>({project_id:id, text:t})));
+      inserted.forEach(t=> steps.push({id:t.id, text:t.text, done:false, assignee:'', dueDate:'', instructions:'', statusNote:'', contextTag:''}));
+    }
+    if(linkIds && linkIds.length){
+      const rows = [];
+      linkIds.forEach(lid=>{ rows.push({project_id:id, linked_project_id:lid}); rows.push({project_id:lid, linked_project_id:id}); });
+      await sbInsert('project_links', rows);
+      linkIds.forEach(lid=>{ const op = state.projects.find(x=>x.id===lid); if(op) op.links.push(id); });
+    }
+    if(resIds && resIds.length){
+      await sbInsert('project_resources', resIds.map(rid=>({project_id:id, resource_id:rid})));
+    }
+    state.projects.push({id, name:name.trim(), status: status||'active', createdAt: Date.now(), steps, params:[], links: linkIds||[], resourceIds: resIds||[]});
+    addUpdate(id, 'Project created'+((linkIds&&linkIds.length)||(resIds&&resIds.length) ? ', linked to existing projects/resources so shared context carries over.' : '.'), 'manual', state.currentUser);
+    state.openProjectId = id;
+  }catch(e){ console.error('createProject failed', e); }
+  render();
+}
+function setProjectStatus(projectId, status){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  p.status = status; render();
+  sbUpdate('projects', 'id=eq.'+projectId, {status}).catch(e=> console.error('setProjectStatus failed', e));
+}
+async function addUser(name){
+  if(!name || !name.trim()) return; const n = name.trim();
+  if(!state.users.includes(n)){
+    state.users.push(n);
+    try{ await sbInsert('users', [{name:n}]); }catch(e){ console.error('addUser failed', e); }
+  }
+  state.currentUser = n; persistCurrentUser(); state.showNewUser = false; render();
+}
+async function createResource(type, name, detail){
+  if(!name || !name.trim()) return;
+  const local = {id:'tmp-'+uid(), type, name:name.trim(), detail:(detail||'').trim()};
+  if(type==='mailbox'){ local.status='connected'; local.lastChecked=null; }
+  state.resources.push(local); state.showNewResource = false; render();
+  try{
+    const [row] = await sbInsert('resources', [{type, name:local.name, detail:local.detail||null}]);
+    local.id = row.id;
+    if(type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, status:'connected'}]);
+  }catch(e){ console.error('createResource failed', e); }
+  return local.id;
+}
+function deleteResource(id){
+  state.resources = state.resources.filter(r=>r.id!==id);
+  state.projects.forEach(p=>{ p.resourceIds = p.resourceIds.filter(x=>x!==id); });
+  render();
+  sbDelete('resources', 'id=eq.'+id).catch(e=> console.error('deleteResource failed', e));
+}
+function markMailboxReconnected(id){
+  const r = state.resources.find(x=>x.id===id); if(!r) return;
+  r.status = 'connected'; r.lastChecked = Date.now();
+  state.reconnectingId = null; render();
+  sbUpdate('mailbox_connections', 'resource_id=eq.'+id, {status:'connected', last_checked: new Date(r.lastChecked).toISOString()}).catch(e=> console.error('reconnect failed', e));
+}
+function fmtAgo(ts){
+  if(!ts) return 'never checked';
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff/60000);
+  if(mins < 1) return 'checked just now';
+  if(mins < 60) return 'checked ' + mins + 'm ago';
+  const hrs = Math.floor(mins/60);
+  if(hrs < 24) return 'checked ' + hrs + 'h ago';
+  const days = Math.floor(hrs/24);
+  return 'checked ' + days + 'd ago';
+}
+
+async function importProjectJSON(raw){
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ state.importError = 'That is not valid JSON — check for a missing comma or bracket.'; render(); return; }
+  const items = Array.isArray(data) ? data : [data];
+  const nameToId = {}; state.projects.forEach(p=> nameToId[p.name.toLowerCase()] = p.id);
+  const resNameToId = {}; state.resources.forEach(r=> resNameToId[r.name.toLowerCase()] = r.id);
+  for(const item of items){
+    if(!item.name) continue;
+    try{
+      const [projRow] = await sbInsert('projects', [{name:item.name, status:item.status||'active'}]);
+      const id = projRow.id;
+      const stepsIn = (item.steps||[]).map(s=> typeof s==='string' ? {text:s} : s);
+      let steps = [];
+      if(stepsIn.length){
+        const taskRows = stepsIn.map(s=>({
+          project_id:id, text:s.text||'', done:!!s.done,
+          done_by: s.done ? (s.doneBy||state.currentUser) : null,
+          done_at: s.done ? new Date().toISOString() : null,
+          assignee: s.assignee||null, due_date: s.dueDate||null,
+          instructions: s.instructions||null, status_note: s.statusNote||null, context_tag: s.contextTag||null
+        }));
+        const inserted = await sbInsert('tasks', taskRows);
+        steps = inserted.map(t=>({id:t.id, text:t.text, done:t.done, doneBy:t.done_by, doneAt: t.done_at? new Date(t.done_at).getTime():null, assignee:t.assignee||'', dueDate:t.due_date||'', instructions:t.instructions||'', statusNote:t.status_note||'', contextTag:t.context_tag||''}));
+      }
+      const links = (item.links||[]).map(n=> nameToId[String(n).toLowerCase()]).filter(Boolean);
+      if(links.length){
+        const rows = []; links.forEach(lid=>{ rows.push({project_id:id, linked_project_id:lid}); rows.push({project_id:lid, linked_project_id:id}); });
+        await sbInsert('project_links', rows);
+        links.forEach(lid=>{ const op = state.projects.find(x=>x.id===lid); if(op) op.links.push(id); });
+      }
+      const resourceIds = (item.resourceIds||item.resources||[]).map(n=> resNameToId[String(n).toLowerCase()]).filter(Boolean);
+      if(resourceIds.length) await sbInsert('project_resources', resourceIds.map(rid=>({project_id:id, resource_id:rid})));
+      let params = [];
+      if((item.params||[]).length){
+        const inserted = await sbInsert('project_params', item.params.map(pr=>({project_id:id, key:pr.key||'', value:pr.value||''})));
+        params = inserted.map(p=>({id:p.id, key:p.key||'', value:p.value||''}));
+      }
+      state.projects.push({id, name:item.name, status:item.status||'active', createdAt:Date.now(), steps, params, links, resourceIds});
+      nameToId[item.name.toLowerCase()] = id;
+      addUpdate(id, 'Project imported.', 'manual', state.currentUser);
+    }catch(e){
+      console.error('import failed for', item.name, e);
+      state.importError = 'Import failed for "' + item.name + '": ' + e.message;
+    }
+  }
+  if(!state.importError){ state.showImport = false; state.importText = ''; }
+  render();
+}
+
+function generateBrief(project){
+  const p = project;
+  const lines = [];
+  lines.push('PROJECT: ' + p.name);
+  lines.push('STATUS: ' + p.status.toUpperCase());
+  lines.push('LAST UPDATED: ' + fmtDate(Date.now()));
+  lines.push('');
+  if(p.params.length){
+    lines.push('PARAMETERS:');
+    p.params.forEach(pr=>{ if(pr.key) lines.push('  - ' + pr.key + ': ' + (pr.value||'—')); });
+    lines.push('');
+  }
+  const linkedProjects = p.links.map(id=>state.projects.find(x=>x.id===id)).filter(Boolean);
+  const linkedResources = p.resourceIds.map(id=>state.resources.find(x=>x.id===id)).filter(Boolean);
+  if(linkedProjects.length || linkedResources.length){
+    lines.push('INTERDEPENDENCIES:');
+    linkedProjects.forEach(lp=> lines.push('  - Linked project: ' + lp.name + ' (' + lp.status + ')'));
+    linkedResources.forEach(r=> lines.push('  - Shared ' + resourceLabel(r).toLowerCase() + ': ' + r.name + (r.detail ? ' — ' + r.detail : '')));
+    lines.push('');
+  }
+  lines.push('STEPS:');
+  p.steps.forEach(s=>{
+    let line = '  [' + (s.done?'x':' ') + '] ' + s.text;
+    if(s.assignee) line += '  (assigned: ' + s.assignee + ')';
+    if(s.dueDate) line += '  (due: ' + fmtDueDate(s.dueDate) + ')';
+    if(s.done && s.doneBy) line += '  — done by ' + s.doneBy + ', ' + fmtDate(s.doneAt);
+    lines.push(line);
+    if(s.instructions) lines.push('      instructions: ' + s.instructions);
+    if(s.statusNote) lines.push('      status: ' + s.statusNote);
+    if(s.contextTag) lines.push('      waiting for: ' + s.contextTag);
+  });
+  const openSteps = p.steps.filter(s=>!s.done);
+  lines.push('');
+  lines.push('NEXT ACTION: ' + (openSteps.length ? openSteps[0].text : 'none outstanding'));
+  lines.push('');
+  const recent = state.updates.filter(u=>u.projectId===p.id).slice(0,8);
+  if(recent.length){
+    lines.push('RECENT PROGRESS (most recent first):');
+    recent.forEach(u=> lines.push('  - [' + fmtDate(u.ts) + '] ' + u.user + ': ' + u.text));
+  }
+  return lines.join('\n');
+}
+
+function copyBrief(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{ state.justCopied = true; render(); setTimeout(()=>{ state.justCopied=false; render(); }, 1800); }).catch(()=>{});
+  }
+}
+
+function allAssignees(){
+  const set = new Set();
+  state.users.forEach(u=> set.add(u));
+  state.projects.forEach(p=> p.steps.forEach(s=>{ if(s.assignee) set.add(s.assignee); }));
+  return Array.from(set).sort();
+}
+
+function render(){
+  const mount = document.getElementById('tk-mount');
+
+  if(state.loadError){
+    mount.innerHTML = `
+      <div class="tk-app">
+        <div class="tk-top"><div class="tk-title">Ledger <span class="tk-sub">ops &amp; project tracker</span></div></div>
+        <div style="padding:40px 24px;">
+          <div class="tk-section-label" style="color:var(--rust);">Couldn't reach Supabase</div>
+          <p style="font-size:13px;line-height:1.6;">${escapeHtml(state.loadError)}</p>
+          <p style="font-size:12px;color:var(--muted);">Common causes: the Row Level Security policy hasn't been applied for the anon/publishable key, the project URL or key is wrong, or the tables haven't been created yet.</p>
+          <button class="tk-btn ghost small" id="tk-retry-load">Retry</button>
+        </div>
+      </div>`;
+    const retryBtn = document.getElementById('tk-retry-load');
+    if(retryBtn) retryBtn.addEventListener('click', ()=> loadAll());
+    return;
+  }
+
+  const openProjects = state.projects.filter(p=>p.status!=='done');
+
+  const topBar = `
+    <div class="tk-top">
+      <div class="tk-title">Ledger <span class="tk-sub">ops &amp; project tracker</span></div>
+      <div class="tk-user-wrap">
+        <span class="tk-user-label">logged in as</span>
+        <select class="tk-select" id="tk-user-select">
+          ${state.users.map(u=>`<option value="${escapeHtml(u)}" ${u===state.currentUser?'selected':''}>${escapeHtml(u)}</option>`).join('')}
+          <option value="__new__">+ Add person…</option>
+        </select>
+      </div>
+    </div>`;
+
+  const tabs = `
+    <div class="tk-tabs">
+      <div class="tk-tab ${state.tab==='today'?'active':''}" data-tab="today">Today</div>
+      <div class="tk-tab ${state.tab==='calendar'?'active':''}" data-tab="calendar">Calendar</div>
+      <div class="tk-tab ${state.tab==='handoffs'?'active':''}" data-tab="handoffs">Handoffs</div>
+      <div class="tk-tab ${state.tab==='board'?'active':''}" data-tab="board">Board</div>
+      <div class="tk-tab ${state.tab==='resources'?'active':''}" data-tab="resources">Resources</div>
+    </div>`;
+
+  const sidebar = `
+    <div class="tk-sidebar">
+      <div class="tk-sidebar-label">All projects</div>
+      ${state.projects.map(p=>`
+        <div class="tk-sidebar-item" data-open="${p.id}">
+          <span class="tk-dot ${p.status}"></span>
+          <span>${escapeHtml(p.name)}</span>
+        </div>
+      `).join('')}
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;">
+        <button class="tk-btn ghost small full" id="tk-new-project-side">+ New project</button>
+        <button class="tk-btn ghost small full" id="tk-import-side">+ Import (paste JSON)</button>
+      </div>
+    </div>`;
+
+  const quickLog = `
+    <div class="tk-quicklog">
+      <select class="tk-select" id="tk-quicklog-project">
+        ${state.projects.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
+      </select>
+      <input class="tk-input" id="tk-quicklog-text" placeholder="Log an update, e.g. Registered the domain name for Project XXX today…" />
+      <button class="tk-btn" id="tk-quicklog-btn">Log</button>
+    </div>`;
+
+  let body = '';
+  if(state.tab==='today'){
+    const actions = [];
+    openProjects.forEach(p=>{ p.steps.filter(s=>!s.done).forEach(s=> actions.push({proj:p, step:s})); });
+    const filteredActions = state.todayFilter==='all' ? actions : actions.filter(a=> a.step.assignee === state.todayFilter);
+    const recent = state.updates.slice(0,20);
+    body = `
+      <div class="tk-two-col">
+        <div>
+          <div class="tk-cal-filter" style="margin-bottom:14px;">
+            <span class="tk-user-label">show tasks for</span>
+            <select class="tk-select" id="tk-today-filter">
+              <option value="all" ${state.todayFilter==='all'?'selected':''}>Everyone</option>
+              ${allAssignees().map(a=>`<option value="${escapeHtml(a)}" ${state.todayFilter===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="tk-section-label">Next actions (${filteredActions.length})</div>
+          ${filteredActions.length ? filteredActions.map(a=>`
+            <div class="tk-action-row">
+              <div class="tk-check" data-proj="${a.proj.id}" data-step="${a.step.id}"></div>
+              <div>
+                <div class="tk-action-text"><span class="tk-action-proj" data-open="${a.proj.id}">${escapeHtml(a.proj.name)}</span>${escapeHtml(a.step.text)}${a.step.assignee?`<span class="tk-action-assignee">${escapeHtml(a.step.assignee)}</span>`:''}${a.step.dueDate?`<span class="tk-action-due">due ${fmtDueDate(a.step.dueDate)}</span>`:''}</div>
+                ${a.step.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(a.step.statusNote)}</div>`:''}
+              </div>
+            </div>
+          `).join('') : `<div class="tk-empty">Nothing outstanding — nice.</div>`}
+        </div>
+        <div>
+          <div class="tk-section-label">Ledger — recent updates</div>
+          ${recent.length ? recent.map(u=>renderLedgerEntry(u,true)).join('') : `<div class="tk-empty">No updates yet.</div>`}
+        </div>
+      </div>`;
+  } else if(state.tab==='calendar'){
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const weekStart = startOfWeek(now);
+    const weekEnd = endOfWeek(now);
+    const all = [];
+    state.projects.forEach(p=> p.steps.filter(s=>!s.done && s.dueDate).forEach(s=> all.push({proj:p, step:s, due:new Date(s.dueDate+'T00:00:00')})));
+    const filtered = state.calFilter==='all' ? all : all.filter(x=> x.step.assignee === state.calFilter);
+    const overdue = filtered.filter(x=> x.due < todayStart).sort((a,b)=>a.due-b.due);
+    const today = filtered.filter(x=> x.due >= todayStart && x.due < new Date(todayStart.getTime()+86400000));
+    const thisWeek = filtered.filter(x=> x.due >= new Date(todayStart.getTime()+86400000) && x.due <= weekEnd).sort((a,b)=>a.due-b.due);
+
+    const renderGroup = (label, items, cls)=>`
+      <div class="tk-cal-group ${cls||''}">
+        <div class="tk-section-label">${label} (${items.length})</div>
+        ${items.length ? items.map(x=>`
+          <div class="tk-action-row">
+            <div class="tk-check" data-proj="${x.proj.id}" data-step="${x.step.id}"></div>
+            <div>
+              <div class="tk-action-text"><span class="tk-action-proj" data-open="${x.proj.id}">${escapeHtml(x.proj.name)}</span>${escapeHtml(x.step.text)}${x.step.assignee?`<span class="tk-action-assignee">${escapeHtml(x.step.assignee)}</span>`:''}<span class="tk-action-due">${fmtDueDate(x.step.dueDate)}</span></div>
+            </div>
+          </div>
+        `).join('') : `<div class="tk-empty">Nothing here.</div>`}
+      </div>`;
+
+    body = `
+      <div class="tk-cal-filter">
+        <span class="tk-user-label">show tasks for</span>
+        <select class="tk-select" id="tk-cal-filter">
+          <option value="all" ${state.calFilter==='all'?'selected':''}>Everyone</option>
+          ${allAssignees().map(a=>`<option value="${escapeHtml(a)}" ${state.calFilter===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+        </select>
+      </div>
+      ${renderGroup('Overdue', overdue, 'overdue')}
+      ${renderGroup('Today', today)}
+      ${renderGroup('This week', thisWeek)}
+      <div class="tk-note">Only steps with a due date show up here — add one when creating or editing a step. Week runs Monday to Sunday.</div>
+    `;
+  } else if(state.tab==='handoffs'){
+    const tagged = [];
+    state.projects.forEach(p=> p.steps.filter(s=>!s.done && s.contextTag && s.contextTag.trim()).forEach(s=> tagged.push({proj:p, step:s})));
+    const groups = {};
+    tagged.forEach(x=>{
+      const key = x.step.contextTag.trim();
+      const lower = key.toLowerCase();
+      if(!groups[lower]) groups[lower] = {label:key, items:[]};
+      groups[lower].items.push(x);
+    });
+    const groupList = Object.values(groups).sort((a,b)=> a.label.localeCompare(b.label));
+    body = `
+      ${groupList.length ? groupList.map(g=>`
+        <div class="tk-cal-group">
+          <div class="tk-section-label">${escapeHtml(g.label)} (${g.items.length})</div>
+          ${g.items.map(x=>`
+            <div class="tk-action-row">
+              <div class="tk-check" data-proj="${x.proj.id}" data-step="${x.step.id}"></div>
+              <div>
+                <div class="tk-action-text"><span class="tk-action-proj" data-open="${x.proj.id}">${escapeHtml(x.proj.name)}</span>${escapeHtml(x.step.text)}${x.step.assignee?`<span class="tk-action-assignee">${escapeHtml(x.step.assignee)}</span>`:''}</div>
+                ${x.step.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(x.step.statusNote)}</div>`:''}
+                ${x.step.instructions?`<div class="tk-step-meta">instructions: ${escapeHtml(x.step.instructions)}</div>`:''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('') : `<div class="tk-empty">Nothing waiting on a person or condition right now. Tag a step (e.g. "When Phillip is in the office") from its project panel to see it grouped here.</div>`}
+    `;
+  } else if(state.tab==='board'){
+    const cols = [{key:'active', label:'Active'},{key:'waiting', label:'Waiting'},{key:'done', label:'Done'}];
+    body = `
+      <div style="margin-bottom:16px;display:flex;gap:8px;">
+        <button class="tk-btn ghost small" id="tk-new-project">+ New project</button>
+        <button class="tk-btn ghost small" id="tk-import-board">+ Import (paste JSON)</button>
+      </div>
+      <div class="tk-board">
+        ${cols.map(col=>{
+          const items = state.projects.filter(p=>p.status===col.key);
+          return `
+            <div>
+              <div class="tk-col-head"><span>${col.label}</span><span>${items.length}</span></div>
+              ${items.map(p=>{
+                const openCount = p.steps.filter(s=>!s.done).length;
+                const lastUpd = state.updates.find(u=>u.projectId===p.id);
+                return `
+                <div class="tk-card" data-open="${p.id}">
+                  <div class="tk-card-title">${escapeHtml(p.name)}</div>
+                  <div class="tk-card-meta">${openCount} open step${openCount===1?'':'s'}${p.links.length?' · '+p.links.length+' linked project'+(p.links.length===1?'':'s'):''}</div>
+                  ${lastUpd ? `<div class="tk-card-last">${escapeHtml(lastUpd.text.slice(0,90))}${lastUpd.text.length>90?'…':''}</div>` : ''}
+                  <div class="tk-card-open">Open project →</div>
+                </div>`;
+              }).join('') || `<div class="tk-empty">—</div>`}
+            </div>`;
+        }).join('')}
+      </div>`;
+  } else if(state.tab==='resources'){
+    body = `
+      <div style="margin-bottom:16px;"><button class="tk-btn ghost small" id="tk-new-resource">+ New shared resource</button></div>
+      ${RESOURCE_TYPES.map(t=>{
+        const items = state.resources.filter(r=>r.type===t.key);
+        if(!items.length) return '';
+        return `
+          <div class="tk-res-group">
+            <div class="tk-section-label">${t.plural||t.label+'s'}</div>
+            ${t.key==='mailbox' ? `<div class="tk-note" style="margin-top:0;margin-bottom:14px;">Checked automatically via — <em>${escapeHtml(INGESTION_SYSTEM_LABEL)}</em>. This line updates once we've chosen the ingestion backend.</div>` : ''}
+            ${items.map(r=>{
+              const usedBy = state.projects.filter(p=>p.resourceIds.includes(r.id));
+              if(t.key==='mailbox'){
+                const statusLabel = r.status==='needs_reauth' ? 'Needs reconnect' : 'Connected';
+                return `
+                  <div class="tk-res-row">
+                    <div>
+                      <div class="tk-res-name">${escapeHtml(r.name)} <span class="tk-mbx-badge ${r.status==='needs_reauth'?'warn':''}">${statusLabel}</span></div>
+                      ${r.detail ? `<div class="tk-res-detail">${escapeHtml(r.detail)}</div>` : ''}
+                      <div class="tk-res-used">${fmtAgo(r.lastChecked)}</div>
+                      <div class="tk-res-used">used by: ${usedBy.length ? usedBy.map(p=>escapeHtml(p.name)).join(', ') : '— none yet'}</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+                      <button class="tk-btn ghost small" data-reconnect-mbx="${r.id}">Reconnect</button>
+                      <button class="tk-btn ghost small" data-del-res="${r.id}">Remove</button>
+                    </div>
+                  </div>`;
+              }
+              return `
+                <div class="tk-res-row">
+                  <div>
+                    <div class="tk-res-name">${escapeHtml(r.name)}</div>
+                    ${r.detail ? `<div class="tk-res-detail">${escapeHtml(r.detail)}</div>` : ''}
+                    <div class="tk-res-used">used by: ${usedBy.length ? usedBy.map(p=>escapeHtml(p.name)).join(', ') : '— none yet'}</div>
+                  </div>
+                  <button class="tk-btn ghost small" data-del-res="${r.id}">Remove</button>
+                </div>`;
+            }).join('')}
+          </div>`;
+      }).join('') || `<div class="tk-empty">No shared resources yet — add mailboxes, guidelines, or key dates that multiple projects use.</div>`}
+    `;
+  }
+
+  let overlay = '';
+  if(state.openProjectId){
+    const p = state.projects.find(x=>x.id===state.openProjectId);
+    if(p){
+      const projUpdates = state.updates.filter(u=>u.projectId===p.id);
+      const otherProjects = state.projects.filter(x=>x.id!==p.id);
+      const brief = generateBrief(p);
+      overlay = `
+        <div class="tk-overlay" id="tk-panel-overlay">
+          <div class="tk-panel" id="tk-panel-inner">
+            <div class="tk-panel-head">
+              <div class="tk-panel-title">${escapeHtml(p.name)}</div>
+              <button class="tk-close" id="tk-panel-close">&times;</button>
+            </div>
+            <div class="tk-status-row">
+              <span class="tk-user-label">status</span>
+              <select class="tk-select" id="tk-status-select">
+                <option value="active" ${p.status==='active'?'selected':''}>Active</option>
+                <option value="waiting" ${p.status==='waiting'?'selected':''}>Waiting</option>
+                <option value="done" ${p.status==='done'?'selected':''}>Done</option>
+              </select>
+            </div>
+
+            <div class="tk-section-label">Parameters</div>
+            ${p.params.map(pr=>`
+              <div class="tk-param-row">
+                <input class="tk-input" data-param-key="${pr.id}" placeholder="Key" value="${escapeHtml(pr.key)}" />
+                <input class="tk-input" data-param-value="${pr.id}" placeholder="Value" value="${escapeHtml(pr.value)}" />
+                <span class="rm" data-rm-param="${pr.id}">&times;</span>
+              </div>
+            `).join('')}
+            <button class="tk-btn ghost small" id="tk-add-param">+ Add parameter</button>
+
+            <div class="tk-section-label" style="margin-top:20px;">Linked projects <span style="font-weight:400;">(shares context/interdependencies)</span></div>
+            <div>
+              ${p.links.map(lid=>{ const lp=state.projects.find(x=>x.id===lid); if(!lp) return ''; return `<span class="tk-chip">${escapeHtml(lp.name)}<span class="x" data-unlink="${lid}">&times;</span></span>`; }).join('') || '<span class="tk-empty" style="padding:0;">None linked</span>'}
+            </div>
+            <div class="tk-chip-add">
+              ${otherProjects.filter(op=>!p.links.includes(op.id)).map(op=>`<span class="tk-chip-choice" data-link="${op.id}">+ ${escapeHtml(op.name)}</span>`).join('')}
+            </div>
+
+            <div class="tk-section-label" style="margin-top:20px;">Shared resources</div>
+            <div>
+              ${p.resourceIds.map(rid=>{ const r=state.resources.find(x=>x.id===rid); if(!r) return ''; return `<span class="tk-chip">${escapeHtml(r.name)}<span class="x" data-unresource="${rid}">&times;</span></span>`; }).join('') || '<span class="tk-empty" style="padding:0;">None linked</span>'}
+            </div>
+            <div class="tk-chip-add">
+              ${state.resources.filter(r=>!p.resourceIds.includes(r.id)).map(r=>`<span class="tk-chip-choice" data-resource="${r.id}">+ ${escapeHtml(r.name)}</span>`).join('')}
+            </div>
+
+            <div class="tk-section-label" style="margin-top:20px;">Steps</div>
+            ${p.steps.map(s=>`
+              <div class="tk-step-row">
+                <div class="tk-check ${s.done?'done':''}" data-detail-step="${s.id}"></div>
+                <div style="flex:1;">
+                  <div class="tk-step-text ${s.done?'done':''}">${escapeHtml(s.text)}</div>
+                  ${s.done && s.doneBy ? `<div class="tk-step-meta">done by ${escapeHtml(s.doneBy)} · ${fmtTime(s.doneAt)}</div>` : ''}
+                  <div class="tk-step-inline">
+                    <input class="tk-input" data-assignee-step="${s.id}" placeholder="Assignee" value="${escapeHtml(s.assignee||'')}" />
+                    <input class="tk-date" type="date" data-due-step="${s.id}" value="${escapeHtml(s.dueDate||'')}" />
+                  </div>
+                  <div class="tk-step-inline">
+                    <input class="tk-input" style="width:100%;" data-instructions-step="${s.id}" placeholder="Instructions — what they need to do" value="${escapeHtml(s.instructions||'')}" />
+                  </div>
+                  <div class="tk-step-inline">
+                    <input class="tk-input" style="width:100%;" data-statusnote-step="${s.id}" placeholder="Status / next action — e.g. pending ABR login" value="${escapeHtml(s.statusNote||'')}" />
+                  </div>
+                  <div class="tk-step-inline">
+                    <input class="tk-input" style="width:100%;" data-contexttag-step="${s.id}" placeholder="Handoff tag — e.g. When Phillip is in the office" value="${escapeHtml(s.contextTag||'')}" />
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+            <div class="tk-addstep">
+              <input class="tk-input" id="tk-addstep-input" placeholder="Add a step…" />
+              <input class="tk-input tk-assignee" id="tk-addstep-assignee" placeholder="Assignee" />
+              <input class="tk-date" type="date" id="tk-addstep-due" />
+              <button class="tk-btn ghost small" id="tk-addstep-btn">Add</button>
+            </div>
+
+            <div class="tk-section-label" style="margin-top:24px;">Log an update</div>
+            <div class="tk-add-update">
+              <textarea class="tk-textarea" id="tk-detail-update-text" placeholder="Free text update — what happened, what's next…"></textarea>
+              <div style="display:flex;justify-content:flex-end;">
+                <button class="tk-btn small" id="tk-detail-update-btn">Log update</button>
+              </div>
+            </div>
+
+            <div class="tk-section-label">Ledger</div>
+            ${projUpdates.length ? projUpdates.map(u=>renderLedgerEntry(u,false)).join('') : `<div class="tk-empty">No entries yet.</div>`}
+
+            <div class="tk-section-label" style="margin-top:24px;">AI context brief <span style="font-weight:400;">— paste into any Claude chat</span></div>
+            <div class="tk-brief-box">${escapeHtml(brief)}</div>
+            <div style="margin-top:8px;"><button class="tk-btn ghost small" id="tk-copy-brief">Copy brief</button>${state.justCopied ? '<span class="tk-copied">Copied</span>' : ''}</div>
+
+            <div class="tk-note">This brief always reflects live state — status, parameters, linked projects/resources, steps (with assignee and due date), and recent progress. Copy it into a new chat so Claude has full context without you re-explaining.</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  let newProjectModal = '';
+  if(state.showNewProject){
+    newProjectModal = `
+      <div class="tk-modal" id="tk-newproj-overlay">
+        <div class="tk-modal-box">
+          <h3>New project</h3>
+          <div class="tk-field"><label>Name</label><input class="tk-input" id="tk-np-name" /></div>
+          <div class="tk-field"><label>Status</label>
+            <select class="tk-select" id="tk-np-status">
+              <option value="active">Active</option><option value="waiting">Waiting</option><option value="done">Done</option>
+            </select>
+          </div>
+          <div class="tk-field"><label>Steps (one per line)</label><textarea class="tk-textarea" id="tk-np-steps" style="min-height:80px;"></textarea></div>
+          <div class="tk-field">
+            <label>Link existing projects (shares interdependencies)</label>
+            <div>${state.projects.map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:4px;"><input type="checkbox" class="tk-np-link" value="${p.id}" /> ${escapeHtml(p.name)}</label>`).join('') || '<span class="tk-empty" style="padding:0;">No other projects yet</span>'}</div>
+          </div>
+          <div class="tk-field">
+            <label>Attach shared resources (mailboxes, guidelines, dates)</label>
+            <div>${state.resources.map(r=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:4px;"><input type="checkbox" class="tk-np-res" value="${r.id}" /> ${escapeHtml(r.name)} <span style="color:var(--muted);">(${resourceLabel(r)})</span></label>`).join('') || '<span class="tk-empty" style="padding:0;">No shared resources yet</span>'}</div>
+          </div>
+          <div class="tk-modal-actions">
+            <button class="tk-btn ghost small" id="tk-np-cancel">Cancel</button>
+            <button class="tk-btn small" id="tk-np-create">Create</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  let newUserModal = '';
+  if(state.showNewUser){
+    newUserModal = `
+      <div class="tk-modal" id="tk-newuser-overlay">
+        <div class="tk-modal-box">
+          <h3>Add person</h3>
+          <div class="tk-field"><label>Name</label><input class="tk-input" id="tk-nu-name" /></div>
+          <div class="tk-modal-actions">
+            <button class="tk-btn ghost small" id="tk-nu-cancel">Cancel</button>
+            <button class="tk-btn small" id="tk-nu-create">Add</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  let newResourceModal = '';
+  if(state.showNewResource){
+    newResourceModal = `
+      <div class="tk-modal" id="tk-newres-overlay">
+        <div class="tk-modal-box">
+          <h3>New shared resource</h3>
+          <div class="tk-field"><label>Type</label>
+            <select class="tk-select" id="tk-nr-type">${RESOURCE_TYPES.map(t=>`<option value="${t.key}">${t.label}</option>`).join('')}</select>
+          </div>
+          <div class="tk-field"><label>Name</label><input class="tk-input" id="tk-nr-name" placeholder="e.g. ops@yourcompany.com" /></div>
+          <div class="tk-field"><label>Detail (optional)</label><textarea class="tk-textarea" id="tk-nr-detail" style="min-height:60px;"></textarea></div>
+          <div class="tk-modal-actions">
+            <button class="tk-btn ghost small" id="tk-nr-cancel">Cancel</button>
+            <button class="tk-btn small" id="tk-nr-create">Add</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  let importModal = '';
+  if(state.showImport){
+    importModal = `
+      <div class="tk-modal" id="tk-import-overlay">
+        <div class="tk-modal-box wide">
+          <h3>Import project from JSON</h3>
+          <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;">Ask Claude in chat to generate this JSON for a new project, then paste it here. Format: {"name","status","steps":[{"text","assignee","dueDate"}],"params":[{"key","value"}],"links":[project names],"resourceIds":[resource names]}</p>
+          <div class="tk-field"><textarea class="tk-textarea" id="tk-import-text" style="min-height:160px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;">${escapeHtml(state.importText)}</textarea></div>
+          ${state.importError ? `<div style="color:var(--rust);font-size:12px;margin-bottom:10px;">${escapeHtml(state.importError)}</div>` : ''}
+          <div class="tk-modal-actions">
+            <button class="tk-btn ghost small" id="tk-import-cancel">Cancel</button>
+            <button class="tk-btn small" id="tk-import-create">Import</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  let reconnectModal = '';
+  if(state.reconnectingId){
+    const r = state.resources.find(x=>x.id===state.reconnectingId);
+    if(r){
+      reconnectModal = `
+        <div class="tk-modal" id="tk-reconnect-overlay">
+          <div class="tk-modal-box">
+            <h3>Reconnect ${escapeHtml(r.name)}</h3>
+            <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 16px;">This mailbox's own Google account needs to go through consent again — the owner completes Google's OAuth screen for this app, the same one-time step as the original setup. Once that's done, mark it reconnected here so the last-checked timer and status reflect it.</p>
+            <div class="tk-modal-actions">
+              <button class="tk-btn ghost small" id="tk-reconnect-cancel">Cancel</button>
+              <button class="tk-btn small" id="tk-reconnect-confirm">Mark as reconnected</button>
+            </div>
+          </div>
+        </div>`;
+    }
+  }
+
+  mount.innerHTML = `
+    <div class="tk-app">
+      ${topBar}
+      ${tabs}
+      <div class="tk-content-row">
+        ${sidebar}
+        <div class="tk-body">
+          ${quickLog}
+          ${body}
+        </div>
+      </div>
+    </div>
+    ${overlay}
+    ${newProjectModal}
+    ${newUserModal}
+    ${newResourceModal}
+    ${importModal}
+    ${reconnectModal}
+  `;
+
+  attachHandlers();
+}
+
+function renderLedgerEntry(u, showProject){
+  const proj = state.projects.find(p=>p.id===u.projectId);
+  return `
+    <div class="tk-ledger-entry">
+      <div class="tk-stamp ${u.type==='system'?'system':''}" style="--tilt:${tiltFor(u.id)}">${escapeHtml(initials(u.user))}<br/>${fmtTime(u.ts)}</div>
+      <div>
+        <div class="tk-ledger-text">${showProject && proj ? `<span class="tk-action-proj" data-open="${proj.id}">${escapeHtml(proj.name)}</span>` : ''}${escapeHtml(u.text)}</div>
+        <div class="tk-ledger-meta">${escapeHtml(u.user)}${u.type==='system'?' · automated':''}</div>
+      </div>
+    </div>`;
+}
+
+function attachHandlers(){
+  const userSel = document.getElementById('tk-user-select');
+  if(userSel) userSel.addEventListener('change', e=>{
+    if(e.target.value==='__new__'){ state.showNewUser = true; render(); return; }
+    state.currentUser = e.target.value; persistCurrentUser(); render();
+  });
+
+  document.querySelectorAll('.tk-tab').forEach(el=> el.addEventListener('click', ()=>{ state.tab = el.dataset.tab; render(); }));
+
+  const calFilter = document.getElementById('tk-cal-filter');
+  if(calFilter) calFilter.addEventListener('change', e=>{ state.calFilter = e.target.value; render(); });
+  const todayFilter = document.getElementById('tk-today-filter');
+  if(todayFilter) todayFilter.addEventListener('change', e=>{ state.todayFilter = e.target.value; render(); });
+
+  const qlBtn = document.getElementById('tk-quicklog-btn');
+  if(qlBtn) qlBtn.addEventListener('click', ()=>{
+    const projId = document.getElementById('tk-quicklog-project').value;
+    const text = document.getElementById('tk-quicklog-text').value;
+    if(text.trim()){ addUpdate(projId, text, 'manual', state.currentUser); render(); }
+  });
+  const qlText = document.getElementById('tk-quicklog-text');
+  if(qlText) qlText.addEventListener('keydown', e=>{ if(e.key==='Enter'){ document.getElementById('tk-quicklog-btn').click(); } });
+
+  document.querySelectorAll('[data-proj][data-step]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const proj = el.dataset.proj, step = el.dataset.step;
+      const p = state.projects.find(p=>p.id===proj); const s = p.steps.find(s=>s.id===step);
+      markStep(proj, step, !s.done);
+    });
+  });
+
+  document.querySelectorAll('[data-open]').forEach(el=>{
+    el.addEventListener('click', (e)=>{ e.stopPropagation(); state.openProjectId = el.dataset.open; render(); });
+  });
+
+  const newProjBtn = document.getElementById('tk-new-project');
+  if(newProjBtn) newProjBtn.addEventListener('click', ()=>{ state.showNewProject = true; render(); });
+  const newProjBtnSide = document.getElementById('tk-new-project-side');
+  if(newProjBtnSide) newProjBtnSide.addEventListener('click', ()=>{ state.showNewProject = true; render(); });
+
+  const importSide = document.getElementById('tk-import-side');
+  if(importSide) importSide.addEventListener('click', ()=>{ state.showImport = true; render(); });
+  const importBoard = document.getElementById('tk-import-board');
+  if(importBoard) importBoard.addEventListener('click', ()=>{ state.showImport = true; render(); });
+
+  const panelClose = document.getElementById('tk-panel-close');
+  if(panelClose) panelClose.addEventListener('click', ()=>{ state.openProjectId = null; render(); });
+  const panelOverlay = document.getElementById('tk-panel-overlay');
+  if(panelOverlay) panelOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-panel-overlay'){ state.openProjectId = null; render(); } });
+
+  const statusSel = document.getElementById('tk-status-select');
+  if(statusSel) statusSel.addEventListener('change', e=>{ setProjectStatus(state.openProjectId, e.target.value); });
+
+  document.querySelectorAll('[data-detail-step]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const p = state.projects.find(p=>p.id===state.openProjectId);
+      const s = p.steps.find(s=>s.id===el.dataset.detailStep);
+      markStep(state.openProjectId, s.id, !s.done);
+    });
+  });
+
+  const addStepBtn = document.getElementById('tk-addstep-btn');
+  if(addStepBtn) addStepBtn.addEventListener('click', ()=>{
+    const text = document.getElementById('tk-addstep-input').value;
+    const assignee = document.getElementById('tk-addstep-assignee').value;
+    const due = document.getElementById('tk-addstep-due').value;
+    addStep(state.openProjectId, text, assignee, due);
+  });
+
+  const detailUpdBtn = document.getElementById('tk-detail-update-btn');
+  if(detailUpdBtn) detailUpdBtn.addEventListener('click', ()=>{
+    const ta = document.getElementById('tk-detail-update-text');
+    if(ta.value.trim()){ addUpdate(state.openProjectId, ta.value, 'manual', state.currentUser); render(); }
+  });
+
+  const addParamBtn = document.getElementById('tk-add-param');
+  if(addParamBtn) addParamBtn.addEventListener('click', ()=> addParam(state.openProjectId));
+
+  document.querySelectorAll('[data-param-key]').forEach(el=> el.addEventListener('change', e=> updateParam(state.openProjectId, el.dataset.paramKey, 'key', e.target.value)));
+  document.querySelectorAll('[data-param-value]').forEach(el=> el.addEventListener('change', e=> updateParam(state.openProjectId, el.dataset.paramValue, 'value', e.target.value)));
+  document.querySelectorAll('[data-rm-param]').forEach(el=> el.addEventListener('click', ()=> removeParam(state.openProjectId, el.dataset.rmParam)));
+
+  document.querySelectorAll('[data-assignee-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.assigneeStep, 'assignee', e.target.value)));
+  document.querySelectorAll('[data-due-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.dueStep, 'dueDate', e.target.value)));
+  document.querySelectorAll('[data-instructions-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.instructionsStep, 'instructions', e.target.value)));
+  document.querySelectorAll('[data-statusnote-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.statusnoteStep, 'statusNote', e.target.value)));
+  document.querySelectorAll('[data-contexttag-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.contexttagStep, 'contextTag', e.target.value)));
+
+  document.querySelectorAll('[data-unlink]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.unlink)));
+  document.querySelectorAll('[data-link]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.link)));
+  document.querySelectorAll('[data-unresource]').forEach(el=> el.addEventListener('click', ()=> toggleResource(state.openProjectId, el.dataset.unresource)));
+  document.querySelectorAll('[data-resource]').forEach(el=> el.addEventListener('click', ()=> toggleResource(state.openProjectId, el.dataset.resource)));
+
+  const copyBriefBtn = document.getElementById('tk-copy-brief');
+  if(copyBriefBtn) copyBriefBtn.addEventListener('click', ()=>{
+    const p = state.projects.find(p=>p.id===state.openProjectId);
+    copyBrief(generateBrief(p));
+  });
+
+  const npCancel = document.getElementById('tk-np-cancel');
+  if(npCancel) npCancel.addEventListener('click', ()=>{ state.showNewProject = false; render(); });
+  const npCreate = document.getElementById('tk-np-create');
+  if(npCreate) npCreate.addEventListener('click', ()=>{
+    const name = document.getElementById('tk-np-name').value;
+    const status = document.getElementById('tk-np-status').value;
+    const steps = document.getElementById('tk-np-steps').value;
+    const linkIds = Array.from(document.querySelectorAll('.tk-np-link:checked')).map(el=>el.value);
+    const resIds = Array.from(document.querySelectorAll('.tk-np-res:checked')).map(el=>el.value);
+    if(name.trim()) createProject(name, steps, status, linkIds, resIds);
+  });
+  const npOverlay = document.getElementById('tk-newproj-overlay');
+  if(npOverlay) npOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-newproj-overlay'){ state.showNewProject=false; render(); } });
+
+  const nuCancel = document.getElementById('tk-nu-cancel');
+  if(nuCancel) nuCancel.addEventListener('click', ()=>{ state.showNewUser = false; render(); });
+  const nuCreate = document.getElementById('tk-nu-create');
+  if(nuCreate) nuCreate.addEventListener('click', ()=>{ const name = document.getElementById('tk-nu-name').value; if(name.trim()) addUser(name); });
+  const nuOverlay = document.getElementById('tk-newuser-overlay');
+  if(nuOverlay) nuOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-newuser-overlay'){ state.showNewUser=false; render(); } });
+
+  const newResBtn = document.getElementById('tk-new-resource');
+  if(newResBtn) newResBtn.addEventListener('click', ()=>{ state.showNewResource = true; render(); });
+  const nrCancel = document.getElementById('tk-nr-cancel');
+  if(nrCancel) nrCancel.addEventListener('click', ()=>{ state.showNewResource = false; render(); });
+  const nrCreate = document.getElementById('tk-nr-create');
+  if(nrCreate) nrCreate.addEventListener('click', ()=>{
+    const type = document.getElementById('tk-nr-type').value;
+    const name = document.getElementById('tk-nr-name').value;
+    const detail = document.getElementById('tk-nr-detail').value;
+    if(name.trim()) createResource(type, name, detail);
+  });
+  const nrOverlay = document.getElementById('tk-newres-overlay');
+  if(nrOverlay) nrOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-newres-overlay'){ state.showNewResource=false; render(); } });
+  document.querySelectorAll('[data-del-res]').forEach(el=> el.addEventListener('click', ()=> deleteResource(el.dataset.delRes)));
+  document.querySelectorAll('[data-reconnect-mbx]').forEach(el=> el.addEventListener('click', ()=>{ state.reconnectingId = el.dataset.reconnectMbx; render(); }));
+  const reconCancel = document.getElementById('tk-reconnect-cancel');
+  if(reconCancel) reconCancel.addEventListener('click', ()=>{ state.reconnectingId = null; render(); });
+  const reconConfirm = document.getElementById('tk-reconnect-confirm');
+  if(reconConfirm) reconConfirm.addEventListener('click', ()=> markMailboxReconnected(state.reconnectingId));
+  const reconOverlay = document.getElementById('tk-reconnect-overlay');
+  if(reconOverlay) reconOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-reconnect-overlay'){ state.reconnectingId=null; render(); } });
+
+  const impCancel = document.getElementById('tk-import-cancel');
+  if(impCancel) impCancel.addEventListener('click', ()=>{ state.showImport = false; state.importError=''; render(); });
+  const impCreate = document.getElementById('tk-import-create');
+  if(impCreate) impCreate.addEventListener('click', ()=>{
+    const text = document.getElementById('tk-import-text').value;
+    state.importText = text;
+    importProjectJSON(text);
+  });
+  const impOverlay = document.getElementById('tk-import-overlay');
+  if(impOverlay) impOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-import-overlay'){ state.showImport=false; render(); } });
+}
+
+loadAll();
+setInterval(()=>{ if(state.tab==='resources') render(); }, 60000);
+})();
+</script>
