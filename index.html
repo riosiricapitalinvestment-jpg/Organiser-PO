@@ -3,7 +3,7 @@
 
 :root{
   --ink:#20231f; --paper:#e9e7dd; --paper-raised:#f2f0e6; --rule:#c7c3b3; --rule-soft:#d8d5c7;
-  --brass:#b0793a; --teal:#33606a; --rust:#a4463b; --muted:#7a7869; --muted-2:#948f7c;
+  --brass:#0e8fa3; --teal:#33606a; --rust:#a4463b; --muted:#7a7869; --muted-2:#948f7c;
 }
 *{box-sizing:border-box;}
 .tk-root{font-family:'Inter',sans-serif;background:transparent;color:var(--ink);min-height:100vh;}
@@ -30,7 +30,7 @@ select.tk-select{cursor:pointer;}
 .tk-content-row{flex:1;display:flex;min-height:0;}
 .tk-sidebar{flex:0 0 210px;border-right:1px solid var(--rule);padding:18px 14px;background:var(--paper-raised);}
 .tk-sidebar-label{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:10px;}
-.tk-sidebar-item{display:flex;align-items:center;gap:7px;padding:6px 4px;cursor:pointer;font-size:12.5px;border-radius:2px;}
+.tk-sidebar-item{display:flex;align-items:center;gap:7px;padding:6px 4px 6px 8px;cursor:pointer;font-size:12.5px;border-radius:2px;border-left:3px solid transparent;}
 .tk-sidebar-item:hover{background:var(--paper);}
 .tk-dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px;}
 .tk-dot.active{background:var(--teal);}
@@ -43,6 +43,11 @@ select.tk-select{cursor:pointer;}
 .tk-section-label{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--rule-soft);display:flex;justify-content:space-between;align-items:center;}
 .tk-action-row{display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-bottom:1px solid var(--rule-soft);}
 .tk-action-row:last-child{border-bottom:none;}
+.tk-action-group{border:1px solid var(--rule);border-left-width:4px;padding:4px 12px 4px;margin-bottom:14px;background:var(--paper-raised);}
+.tk-action-group .tk-action-row:last-child{border-bottom:none;}
+.tk-action-group-header{font-family:'Fraunces',serif;font-weight:600;font-size:14px;padding:9px 2px;display:flex;align-items:center;gap:8px;cursor:pointer;border-bottom:1px solid var(--rule-soft);}
+.tk-action-group-header .dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;}
+.tk-action-group-header .count{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);}
 .tk-check{width:16px;height:16px;border:1.5px solid var(--muted-2);border-radius:2px;flex:0 0 16px;margin-top:2px;cursor:pointer;background:var(--paper);position:relative;}
 .tk-check.done{background:var(--teal);border-color:var(--teal);}
 .tk-check.done::after{content:'';position:absolute;left:4px;top:1px;width:5px;height:9px;border-right:2px solid var(--paper);border-bottom:2px solid var(--paper);transform:rotate(40deg);}
@@ -61,7 +66,7 @@ select.tk-select{cursor:pointer;}
 .tk-board{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
 @media (max-width:800px){.tk-board{grid-template-columns:1fr;}}
 .tk-col-head{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
-.tk-card{background:var(--paper-raised);border:1px solid var(--rule);padding:12px 14px;margin-bottom:12px;cursor:pointer;transition:border-color .15s;}
+.tk-card{background:var(--paper-raised);border:1px solid var(--rule);border-left-width:4px;padding:12px 14px;margin-bottom:12px;cursor:pointer;transition:border-color .15s;}
 .tk-card:hover{border-color:var(--brass);}
 .tk-card-title{font-family:'Fraunces',serif;font-size:15.5px;font-weight:600;margin-bottom:5px;}
 .tk-card-meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.03em;}
@@ -245,6 +250,15 @@ function uid(){ return Math.random().toString(36).slice(2,10); }
 function lsGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
 function lsSet(key, val){ try{ localStorage.setItem(key, val); }catch(e){} }
 
+// Deterministic per-project colour, distinct from the danger/status colours
+// (rust, teal) so it never gets confused with "overdue" or "connected" cues.
+const PROJECT_COLORS = ['#0e7a8f','#b0793a','#6b4fa0','#3d7a4f','#8a5a44','#4a5b8c','#9c6b9e','#5c8a3a','#2f6690','#a15fa3'];
+function projectColor(id){
+  let h = 0;
+  for(const c of String(id)) h = (h*31 + c.charCodeAt(0)) >>> 0;
+  return PROJECT_COLORS[h % PROJECT_COLORS.length];
+}
+
 async function seedIfEmpty(){
   const existing = await sbSelect('projects', 'select=id&limit=1');
   if(existing && existing.length) return;
@@ -255,7 +269,7 @@ async function seedIfEmpty(){
   for(const r of SEED_RESOURCES){
     const [row] = await sbInsert('resources', [{type:r.type, name:r.name, detail:r.detail}]);
     resourceIdByName[r.name] = row.id;
-    if(r.type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, status:'connected', last_checked: new Date(Date.now()-1000*60*60*3).toISOString()}]);
+    if(r.type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, google_account_email: r.name, status:'connected', last_checked: new Date(Date.now()-1000*60*60*3).toISOString()}]);
   }
 
   for(const p of SEED_PROJECTS){
@@ -503,7 +517,7 @@ async function createResource(type, name, detail){
   try{
     const [row] = await sbInsert('resources', [{type, name:local.name, detail:local.detail||null}]);
     local.id = row.id;
-    if(type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, status:'connected'}]);
+    if(type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, google_account_email: local.name, status:'connected'}]);
   }catch(e){ console.error('createResource failed', e); }
   return local.id;
 }
@@ -682,7 +696,7 @@ function render(){
     <div class="tk-sidebar">
       <div class="tk-sidebar-label">All projects</div>
       ${state.projects.map(p=>`
-        <div class="tk-sidebar-item" data-open="${p.id}">
+        <div class="tk-sidebar-item" data-open="${p.id}" style="border-left-color:${projectColor(p.id)};">
           <span class="tk-dot ${p.status}"></span>
           <span>${escapeHtml(p.name)}</span>
         </div>
@@ -707,6 +721,11 @@ function render(){
     const actions = [];
     openProjects.forEach(p=>{ p.steps.filter(s=>!s.done).forEach(s=> actions.push({proj:p, step:s})); });
     const filteredActions = state.todayFilter==='all' ? actions : actions.filter(a=> a.step.assignee === state.todayFilter);
+    const groups = [];
+    state.projects.forEach(p=>{
+      const items = filteredActions.filter(a=>a.proj.id===p.id);
+      if(items.length) groups.push({proj:p, items});
+    });
     const recent = state.updates.slice(0,20);
     body = `
       <div class="tk-two-col">
@@ -719,13 +738,21 @@ function render(){
             </select>
           </div>
           <div class="tk-section-label">Next actions (${filteredActions.length})</div>
-          ${filteredActions.length ? filteredActions.map(a=>`
-            <div class="tk-action-row">
-              <div class="tk-check" data-proj="${a.proj.id}" data-step="${a.step.id}"></div>
-              <div>
-                <div class="tk-action-text"><span class="tk-action-proj" data-open="${a.proj.id}">${escapeHtml(a.proj.name)}</span>${escapeHtml(a.step.text)}${a.step.assignee?`<span class="tk-action-assignee">${escapeHtml(a.step.assignee)}</span>`:''}${a.step.dueDate?`<span class="tk-action-due">due ${fmtDueDate(a.step.dueDate)}</span>`:''}</div>
-                ${a.step.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(a.step.statusNote)}</div>`:''}
+          ${groups.length ? groups.map(g=>`
+            <div class="tk-action-group" style="border-left-color:${projectColor(g.proj.id)};">
+              <div class="tk-action-group-header" data-open="${g.proj.id}">
+                <span class="dot" style="background:${projectColor(g.proj.id)};"></span>${escapeHtml(g.proj.name)}
+                <span class="count">${g.items.length}</span>
               </div>
+              ${g.items.map(a=>`
+                <div class="tk-action-row">
+                  <div class="tk-check" data-proj="${a.proj.id}" data-step="${a.step.id}"></div>
+                  <div>
+                    <div class="tk-action-text">${escapeHtml(a.step.text)}${a.step.assignee?`<span class="tk-action-assignee">${escapeHtml(a.step.assignee)}</span>`:''}${a.step.dueDate?`<span class="tk-action-due">due ${fmtDueDate(a.step.dueDate)}</span>`:''}</div>
+                    ${a.step.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(a.step.statusNote)}</div>`:''}
+                  </div>
+                </div>
+              `).join('')}
             </div>
           `).join('') : `<div class="tk-empty">Nothing outstanding — nice.</div>`}
         </div>
@@ -753,7 +780,7 @@ function render(){
           <div class="tk-action-row">
             <div class="tk-check" data-proj="${x.proj.id}" data-step="${x.step.id}"></div>
             <div>
-              <div class="tk-action-text"><span class="tk-action-proj" data-open="${x.proj.id}">${escapeHtml(x.proj.name)}</span>${escapeHtml(x.step.text)}${x.step.assignee?`<span class="tk-action-assignee">${escapeHtml(x.step.assignee)}</span>`:''}<span class="tk-action-due">${fmtDueDate(x.step.dueDate)}</span></div>
+              <div class="tk-action-text"><span class="tk-action-proj" data-open="${x.proj.id}" style="color:${projectColor(x.proj.id)};text-decoration-color:${projectColor(x.proj.id)};">${escapeHtml(x.proj.name)}</span>${escapeHtml(x.step.text)}${x.step.assignee?`<span class="tk-action-assignee">${escapeHtml(x.step.assignee)}</span>`:''}<span class="tk-action-due">${fmtDueDate(x.step.dueDate)}</span></div>
             </div>
           </div>
         `).join('') : `<div class="tk-empty">Nothing here.</div>`}
@@ -791,7 +818,7 @@ function render(){
             <div class="tk-action-row">
               <div class="tk-check" data-proj="${x.proj.id}" data-step="${x.step.id}"></div>
               <div>
-                <div class="tk-action-text"><span class="tk-action-proj" data-open="${x.proj.id}">${escapeHtml(x.proj.name)}</span>${escapeHtml(x.step.text)}${x.step.assignee?`<span class="tk-action-assignee">${escapeHtml(x.step.assignee)}</span>`:''}</div>
+                <div class="tk-action-text"><span class="tk-action-proj" data-open="${x.proj.id}" style="color:${projectColor(x.proj.id)};text-decoration-color:${projectColor(x.proj.id)};">${escapeHtml(x.proj.name)}</span>${escapeHtml(x.step.text)}${x.step.assignee?`<span class="tk-action-assignee">${escapeHtml(x.step.assignee)}</span>`:''}</div>
                 ${x.step.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(x.step.statusNote)}</div>`:''}
                 ${x.step.instructions?`<div class="tk-step-meta">instructions: ${escapeHtml(x.step.instructions)}</div>`:''}
               </div>
@@ -817,7 +844,7 @@ function render(){
                 const openCount = p.steps.filter(s=>!s.done).length;
                 const lastUpd = state.updates.find(u=>u.projectId===p.id);
                 return `
-                <div class="tk-card" data-open="${p.id}">
+                <div class="tk-card" data-open="${p.id}" style="border-left-color:${projectColor(p.id)};">
                   <div class="tk-card-title">${escapeHtml(p.name)}</div>
                   <div class="tk-card-meta">${openCount} open step${openCount===1?'':'s'}${p.links.length?' · '+p.links.length+' linked project'+(p.links.length===1?'':'s'):''}</div>
                   ${lastUpd ? `<div class="tk-card-last">${escapeHtml(lastUpd.text.slice(0,90))}${lastUpd.text.length>90?'…':''}</div>` : ''}
@@ -881,7 +908,7 @@ function render(){
         <div class="tk-overlay" id="tk-panel-overlay">
           <div class="tk-panel" id="tk-panel-inner">
             <div class="tk-panel-head">
-              <div class="tk-panel-title">${escapeHtml(p.name)}</div>
+              <div class="tk-panel-title"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${projectColor(p.id)};margin-right:9px;vertical-align:middle;"></span>${escapeHtml(p.name)}</div>
               <button class="tk-close" id="tk-panel-close">&times;</button>
             </div>
             <div class="tk-status-row">
@@ -1097,7 +1124,7 @@ function renderLedgerEntry(u, showProject){
     <div class="tk-ledger-entry">
       <div class="tk-stamp ${u.type==='system'?'system':''}" style="--tilt:${tiltFor(u.id)}">${escapeHtml(initials(u.user))}<br/>${fmtTime(u.ts)}</div>
       <div>
-        <div class="tk-ledger-text">${showProject && proj ? `<span class="tk-action-proj" data-open="${proj.id}">${escapeHtml(proj.name)}</span>` : ''}${escapeHtml(u.text)}</div>
+        <div class="tk-ledger-text">${showProject && proj ? `<span class="tk-action-proj" data-open="${proj.id}" style="color:${projectColor(proj.id)};text-decoration-color:${projectColor(proj.id)};">${escapeHtml(proj.name)}</span>` : ''}${escapeHtml(u.text)}</div>
         <div class="tk-ledger-meta">${escapeHtml(u.user)}${u.type==='system'?' · automated':''}</div>
       </div>
     </div>`;
