@@ -168,7 +168,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-09 05:47 UTC';
+const BUILD_VERSION = '2026-07-09 06:29 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -222,7 +222,6 @@ function sbDelete(table, query){
 // (when the `projects` table is empty), so the live app starts with the
 // same real projects already being tracked instead of an empty board.
 const SEED_RESOURCES = [
-  {type:'mailbox', name:'ops@yourcompany.com', detail:'Shared inbox — MedCore + vendor invoices land here'},
   {type:'guideline', name:'MedCore data handling policy', detail:'No PHI leaves the shared Supabase project; anonymise before export'},
   {type:'date', name:'Q3 close', detail:'Sept 30 — invoices + finance rollups due'}
 ];
@@ -230,7 +229,7 @@ const SEED_PROJECTS = [
   {
     key:'medcore', name:'MedCore Integration', status:'active',
     params:[{key:'Counterparty',value:'MedCore Health'},{key:'Deadline',value:'Phase 2 sign-off, end of month'}],
-    linkKeys:['ops-dashboard'], resourceNames:['ops@yourcompany.com','MedCore data handling policy'],
+    linkKeys:['ops-dashboard'], resourceNames:['MedCore data handling policy'],
     steps:[
       {text:'Confirm data mapping with MedCore eng lead', done:true, doneBy:'You'},
       {text:'Set up Supabase schema for shared tables', done:true, doneBy:'You'},
@@ -241,7 +240,7 @@ const SEED_PROJECTS = [
   {
     key:'ops-dashboard', name:'Email Triage & Ops Dashboard', status:'active',
     params:[{key:'Stack',value:'Supabase + Gmail API'}],
-    linkKeys:['medcore'], resourceNames:['ops@yourcompany.com'],
+    linkKeys:['medcore'], resourceNames:[],
     steps:[
       {text:'Register Google Cloud project + OAuth client', done:true, doneBy:'You'},
       {text:'Get consent from each mailbox owner', done:true, doneBy:'You'},
@@ -1094,7 +1093,7 @@ function render(){
           <div class="tk-field"><label>Type</label>
             <select class="tk-select" id="tk-nr-type">${RESOURCE_TYPES.map(t=>`<option value="${t.key}">${t.label}</option>`).join('')}</select>
           </div>
-          <div class="tk-field"><label>Name</label><input class="tk-input" id="tk-nr-name" placeholder="e.g. ops@yourcompany.com" /></div>
+          <div class="tk-field"><label>Name</label><input class="tk-input" id="tk-nr-name" placeholder="e.g. billing@yourdomain.com" /></div>
           <div class="tk-field"><label>Detail (optional)</label><textarea class="tk-textarea" id="tk-nr-detail" style="min-height:60px;"></textarea></div>
           <div class="tk-modal-actions">
             <button class="tk-btn ghost small" id="tk-nr-cancel">Cancel</button>
