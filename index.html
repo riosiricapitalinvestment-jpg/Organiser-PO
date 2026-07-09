@@ -1,4 +1,13 @@
-<style> 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organiser — Ops Tracker</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
 
 :root{
@@ -13,6 +22,7 @@
 .tk-title .tk-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:0.04em;text-transform:uppercase;}
 .tk-user-wrap{display:flex;align-items:center;gap:10px;}
 .tk-user-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;}
+.tk-build-tag{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--muted-2);letter-spacing:0.02em;border:1px solid var(--rule);padding:2px 6px;border-radius:10px;cursor:help;}
 select.tk-select, .tk-btn, input.tk-input, textarea.tk-textarea, input.tk-date{
   font-family:'Inter',sans-serif;font-size:13px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);padding:7px 10px;border-radius:2px;
 }
@@ -129,6 +139,9 @@ textarea.tk-textarea{width:100%;font-family:inherit;}
 .tk-mbx-badge{font-family:'IBM Plex Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.03em;color:var(--teal);border:1px solid var(--teal);padding:2px 6px;border-radius:10px;margin-left:6px;}
 .tk-mbx-badge.warn{color:var(--rust);border-color:var(--rust);}
 </style>
+</head>
+<body>
+
 
 <div id="tk-mount" class="tk-root"><div class="tk-loading">loading ledger…</div></div>
 
@@ -152,6 +165,11 @@ const RESOURCE_TYPES = [
 // Row Level Security policies on the database side, not by keeping this
 // value secret. Never put the sb_secret_... key here.
 // ---------------------------------------------------------------------------
+// Bumped by hand every time a new version of this file is generated —
+// compare this against what's stated in chat to confirm you're not looking
+// at a cached copy. Shown in the top bar.
+const BUILD_VERSION = '2026-07-09 05:47 UTC';
+
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
 
@@ -673,7 +691,7 @@ function render(){
   if(state.loadError){
     mount.innerHTML = `
       <div class="tk-app">
-        <div class="tk-top"><div class="tk-title">Ledger <span class="tk-sub">ops &amp; project tracker</span></div></div>
+        <div class="tk-top"><div class="tk-title">Ledger <span class="tk-sub">ops &amp; project tracker</span></div><span class="tk-build-tag">build ${escapeHtml(BUILD_VERSION)}</span></div>
         <div style="padding:40px 24px;">
           <div class="tk-section-label" style="color:var(--rust);">Couldn't reach Supabase</div>
           <p style="font-size:13px;line-height:1.6;">${escapeHtml(state.loadError)}</p>
@@ -692,6 +710,7 @@ function render(){
     <div class="tk-top">
       <div class="tk-title">Ledger <span class="tk-sub">ops &amp; project tracker</span></div>
       <div class="tk-user-wrap">
+        <span class="tk-build-tag" title="Compare this against what's stated in chat to check for a stale cached copy">build ${escapeHtml(BUILD_VERSION)}</span>
         <span class="tk-user-label">logged in as</span>
         <select class="tk-select" id="tk-user-select">
           ${state.users.map(u=>`<option value="${escapeHtml(u)}" ${u===state.currentUser?'selected':''}>${escapeHtml(u)}</option>`).join('')}
@@ -1306,3 +1325,6 @@ loadAll();
 setInterval(()=>{ if(state.tab==='resources') render(); }, 60000);
 })();
 </script>
+
+</body>
+</html>
