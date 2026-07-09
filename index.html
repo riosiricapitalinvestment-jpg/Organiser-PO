@@ -118,6 +118,10 @@ select.tk-select{cursor:pointer;}
 .tk-modal-box label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;color:var(--muted);letter-spacing:0.04em;}
 .tk-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
 .tk-loading{padding:60px 24px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.tk-oauth-banner{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 24px;font-size:13px;border-bottom:1px solid var(--rule-soft);}
+.tk-oauth-banner.good{background:#e4efe6;color:#2c5c3a;}
+.tk-oauth-banner.warn{background:#f5eee0;color:#7a5b1e;}
+.tk-oauth-banner.bad{background:#f5e4e1;color:var(--rust);}
 textarea.tk-textarea{width:100%;font-family:inherit;}
 .tk-cal-group{margin-bottom:26px;}
 .tk-cal-group.overdue .tk-section-label{color:var(--rust);}
@@ -150,6 +154,23 @@ const RESOURCE_TYPES = [
 // ---------------------------------------------------------------------------
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
+
+// Google OAuth — the client ID is public/safe to embed (only the client
+// secret, which lives server-side in the Edge Function, needs protecting).
+const GOOGLE_CLIENT_ID = '696960566917-75kc3k9pknnsb1bg7ecj3aerso871k8b.apps.googleusercontent.com';
+const GMAIL_REDIRECT_URI = SUPABASE_URL + '/functions/v1/gmail-oauth-callback';
+function buildGoogleAuthUrl(resourceId){
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GMAIL_REDIRECT_URI,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    access_type: 'offline',
+    prompt: 'consent',
+    state: resourceId
+  });
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+}
 
 async function sbFetch(path, options={}){
   const headers = {
@@ -242,8 +263,7 @@ let state = {
   projects: [], updates: [], resources: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
   tab: 'today', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
-  reconnectingId: null,
-  justCopied: false, loadError: null
+  justCopied: false, loadError: null, oauthBanner: null
 };
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -269,7 +289,7 @@ async function seedIfEmpty(){
   for(const r of SEED_RESOURCES){
     const [row] = await sbInsert('resources', [{type:r.type, name:r.name, detail:r.detail}]);
     resourceIdByName[r.name] = row.id;
-    if(r.type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, google_account_email: r.name, status:'connected', last_checked: new Date(Date.now()-1000*60*60*3).toISOString()}]);
+    if(r.type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, google_account_email: r.name, status:'needs_reauth'}]);
   }
 
   for(const p of SEED_PROJECTS){
@@ -512,12 +532,12 @@ async function addUser(name){
 async function createResource(type, name, detail){
   if(!name || !name.trim()) return;
   const local = {id:'tmp-'+uid(), type, name:name.trim(), detail:(detail||'').trim()};
-  if(type==='mailbox'){ local.status='connected'; local.lastChecked=null; }
+  if(type==='mailbox'){ local.status='needs_reauth'; local.lastChecked=null; }
   state.resources.push(local); state.showNewResource = false; render();
   try{
     const [row] = await sbInsert('resources', [{type, name:local.name, detail:local.detail||null}]);
     local.id = row.id;
-    if(type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, google_account_email: local.name, status:'connected'}]);
+    if(type==='mailbox') await sbInsert('mailbox_connections', [{resource_id: row.id, google_account_email: local.name, status:'needs_reauth'}]);
   }catch(e){ console.error('createResource failed', e); }
   return local.id;
 }
@@ -527,11 +547,8 @@ function deleteResource(id){
   render();
   sbDelete('resources', 'id=eq.'+id).catch(e=> console.error('deleteResource failed', e));
 }
-function markMailboxReconnected(id){
-  const r = state.resources.find(x=>x.id===id); if(!r) return;
-  r.status = 'connected'; r.lastChecked = Date.now();
-  state.reconnectingId = null; render();
-  sbUpdate('mailbox_connections', 'resource_id=eq.'+id, {status:'connected', last_checked: new Date(r.lastChecked).toISOString()}).catch(e=> console.error('reconnect failed', e));
+function connectMailbox(id){
+  window.location.href = buildGoogleAuthUrl(id);
 }
 function fmtAgo(ts){
   if(!ts) return 'never checked';
@@ -682,6 +699,12 @@ function render(){
         </select>
       </div>
     </div>`;
+
+  const banner = state.oauthBanner ? `
+    <div class="tk-oauth-banner ${state.oauthBanner.kind}">
+      ${escapeHtml(state.oauthBanner.text)}
+      <button class="tk-btn ghost small" id="tk-dismiss-banner">Dismiss</button>
+    </div>` : '';
 
   const tabs = `
     <div class="tk-tabs">
@@ -867,7 +890,9 @@ function render(){
             ${items.map(r=>{
               const usedBy = state.projects.filter(p=>p.resourceIds.includes(r.id));
               if(t.key==='mailbox'){
-                const statusLabel = r.status==='needs_reauth' ? 'Needs reconnect' : 'Connected';
+                const neverConnected = r.status==='needs_reauth' && !r.lastChecked;
+                const statusLabel = r.status==='needs_reauth' ? (neverConnected ? 'Not connected' : 'Needs reconnect') : 'Connected';
+                const btnLabel = neverConnected ? 'Connect' : 'Reconnect';
                 return `
                   <div class="tk-res-row">
                     <div>
@@ -877,7 +902,7 @@ function render(){
                       <div class="tk-res-used">used by: ${usedBy.length ? usedBy.map(p=>escapeHtml(p.name)).join(', ') : '— none yet'}</div>
                     </div>
                     <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-                      <button class="tk-btn ghost small" data-reconnect-mbx="${r.id}">Reconnect</button>
+                      <button class="tk-btn ghost small" data-connect-mbx="${r.id}">${btnLabel}</button>
                       <button class="tk-btn ghost small" data-del-res="${r.id}">Remove</button>
                     </div>
                   </div>`;
@@ -1077,27 +1102,11 @@ function render(){
       </div>`;
   }
 
-  let reconnectModal = '';
-  if(state.reconnectingId){
-    const r = state.resources.find(x=>x.id===state.reconnectingId);
-    if(r){
-      reconnectModal = `
-        <div class="tk-modal" id="tk-reconnect-overlay">
-          <div class="tk-modal-box">
-            <h3>Reconnect ${escapeHtml(r.name)}</h3>
-            <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 16px;">This mailbox's own Google account needs to go through consent again — the owner completes Google's OAuth screen for this app, the same one-time step as the original setup. Once that's done, mark it reconnected here so the last-checked timer and status reflect it.</p>
-            <div class="tk-modal-actions">
-              <button class="tk-btn ghost small" id="tk-reconnect-cancel">Cancel</button>
-              <button class="tk-btn small" id="tk-reconnect-confirm">Mark as reconnected</button>
-            </div>
-          </div>
-        </div>`;
-    }
-  }
 
   mount.innerHTML = `
     <div class="tk-app">
       ${topBar}
+      ${banner}
       ${tabs}
       <div class="tk-content-row">
         ${sidebar}
@@ -1112,7 +1121,6 @@ function render(){
     ${newUserModal}
     ${newResourceModal}
     ${importModal}
-    ${reconnectModal}
   `;
 
   attachHandlers();
@@ -1131,6 +1139,8 @@ function renderLedgerEntry(u, showProject){
 }
 
 function attachHandlers(){
+  const dismissBanner = document.getElementById('tk-dismiss-banner');
+  if(dismissBanner) dismissBanner.addEventListener('click', ()=>{ state.oauthBanner = null; render(); });
   const userSel = document.getElementById('tk-user-select');
   if(userSel) userSel.addEventListener('change', e=>{
     if(e.target.value==='__new__'){ state.showNewUser = true; render(); return; }
@@ -1264,13 +1274,7 @@ function attachHandlers(){
   const nrOverlay = document.getElementById('tk-newres-overlay');
   if(nrOverlay) nrOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-newres-overlay'){ state.showNewResource=false; render(); } });
   document.querySelectorAll('[data-del-res]').forEach(el=> el.addEventListener('click', ()=> deleteResource(el.dataset.delRes)));
-  document.querySelectorAll('[data-reconnect-mbx]').forEach(el=> el.addEventListener('click', ()=>{ state.reconnectingId = el.dataset.reconnectMbx; render(); }));
-  const reconCancel = document.getElementById('tk-reconnect-cancel');
-  if(reconCancel) reconCancel.addEventListener('click', ()=>{ state.reconnectingId = null; render(); });
-  const reconConfirm = document.getElementById('tk-reconnect-confirm');
-  if(reconConfirm) reconConfirm.addEventListener('click', ()=> markMailboxReconnected(state.reconnectingId));
-  const reconOverlay = document.getElementById('tk-reconnect-overlay');
-  if(reconOverlay) reconOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-reconnect-overlay'){ state.reconnectingId=null; render(); } });
+  document.querySelectorAll('[data-connect-mbx]').forEach(el=> el.addEventListener('click', ()=> connectMailbox(el.dataset.connectMbx)));
 
   const impCancel = document.getElementById('tk-import-cancel');
   if(impCancel) impCancel.addEventListener('click', ()=>{ state.showImport = false; state.importError=''; render(); });
@@ -1284,6 +1288,20 @@ function attachHandlers(){
   if(impOverlay) impOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-import-overlay'){ state.showImport=false; render(); } });
 }
 
+function checkOAuthRedirectResult(){
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get('mbx_status');
+  if(!status) return;
+  const detail = params.get('mbx_detail');
+  if(status==='connected') state.oauthBanner = {kind:'good', text:'Mailbox connected successfully.'};
+  else if(status==='denied') state.oauthBanner = {kind:'warn', text:'Consent was declined, so nothing was connected.'};
+  else state.oauthBanner = {kind:'bad', text:'Something went wrong connecting that mailbox' + (detail ? (': ' + detail) : '.') };
+  // clean the URL so refreshing doesn't re-show the banner
+  const clean = window.location.pathname;
+  window.history.replaceState({}, '', clean);
+}
+
+checkOAuthRedirectResult();
 loadAll();
 setInterval(()=>{ if(state.tab==='resources') render(); }, 60000);
 })();
