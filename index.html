@@ -102,10 +102,13 @@ select.tk-select{cursor:pointer;}
 .tk-overlay{position:fixed;inset:0;background:rgba(20,20,15,0.35);display:flex;justify-content:flex-end;z-index:50;}
 .tk-panel{width:min(560px,94vw);background:var(--paper);height:100%;overflow-y:auto;padding:22px 24px 60px;border-left:1px solid var(--rule);}
 .tk-panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;}
-.tk-panel-title{font-family:'Fraunces',serif;font-size:22px;font-weight:600;}
+.tk-panel-title{font-family:'Fraunces',serif;font-size:22px;font-weight:600;display:flex;align-items:center;flex:1;}
+.tk-panel-title-input{font-family:'Fraunces',serif;font-size:22px;font-weight:600;background:transparent;border:1px solid transparent;border-radius:2px;padding:2px 4px;flex:1;min-width:0;color:var(--ink);}
+.tk-panel-title-input:hover{border-color:var(--rule-soft);}
+.tk-panel-title-input:focus{border-color:var(--rule);outline:none;background:var(--paper-raised);}
 .tk-close{cursor:pointer;font-size:20px;color:var(--muted);background:none;border:none;line-height:1;padding:2px 6px;}
 .tk-close:hover{color:var(--ink);}
-.tk-status-row{display:flex;gap:8px;align-items:center;margin:10px 0 22px;}
+.tk-status-row{display:flex;gap:8px;align-items:center;margin:10px 0 22px;flex-wrap:wrap;}
 .tk-step-row{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px solid var(--rule-soft);}
 .tk-step-text{font-size:13.5px;flex:1;}
 .tk-step-text.done{color:var(--muted);text-decoration:line-through;}
@@ -168,7 +171,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-09 06:29 UTC';
+const BUILD_VERSION = '2026-07-09 06:39 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -280,7 +283,7 @@ let state = {
   projects: [], updates: [], resources: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
   tab: 'today', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
-  justCopied: false, loadError: null, oauthBanner: null
+  justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false
 };
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -537,6 +540,22 @@ function setProjectStatus(projectId, status){
   const p = state.projects.find(p=>p.id===projectId); if(!p) return;
   p.status = status; render();
   sbUpdate('projects', 'id=eq.'+projectId, {status}).catch(e=> console.error('setProjectStatus failed', e));
+}
+function renameProject(projectId, name){
+  if(!name || !name.trim()) return;
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  if(p.name === name.trim()) return;
+  p.name = name.trim(); render();
+  sbUpdate('projects', 'id=eq.'+projectId, {name: p.name}).catch(e=> console.error('renameProject failed', e));
+}
+function deleteProject(projectId){
+  state.projects = state.projects.filter(p=>p.id!==projectId);
+  state.projects.forEach(p=>{ p.links = p.links.filter(x=>x!==projectId); });
+  state.updates = state.updates.filter(u=>u.projectId!==projectId);
+  state.openProjectId = null;
+  state.confirmDeleteProject = false;
+  render();
+  sbDelete('projects', 'id=eq.'+projectId).catch(e=> console.error('deleteProject failed', e));
 }
 async function addUser(name){
   if(!name || !name.trim()) return; const n = name.trim();
@@ -951,7 +970,10 @@ function render(){
         <div class="tk-overlay" id="tk-panel-overlay">
           <div class="tk-panel" id="tk-panel-inner">
             <div class="tk-panel-head">
-              <div class="tk-panel-title"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${projectColor(p.id)};margin-right:9px;vertical-align:middle;"></span>${escapeHtml(p.name)}</div>
+              <div class="tk-panel-title">
+                <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${projectColor(p.id)};margin-right:9px;vertical-align:middle;flex:0 0 11px;"></span>
+                <input class="tk-panel-title-input" data-rename-project="${p.id}" value="${escapeHtml(p.name)}" />
+              </div>
               <button class="tk-close" id="tk-panel-close">&times;</button>
             </div>
             <div class="tk-status-row">
@@ -961,6 +983,12 @@ function render(){
                 <option value="waiting" ${p.status==='waiting'?'selected':''}>Waiting</option>
                 <option value="done" ${p.status==='done'?'selected':''}>Done</option>
               </select>
+              <span style="flex:1;"></span>
+              ${state.confirmDeleteProject ? `
+                <span style="font-size:12px;color:var(--rust);">Delete this project and all its tasks/updates?</span>
+                <button class="tk-btn ghost small" id="tk-delete-cancel">Cancel</button>
+                <button class="tk-btn danger small" id="tk-delete-confirm">Confirm delete</button>
+              ` : `<button class="tk-btn ghost small" id="tk-delete-project" style="color:var(--rust);border-color:var(--rust);">Delete project</button>`}
             </div>
 
             <div class="tk-section-label">Parameters</div>
@@ -1190,7 +1218,7 @@ function attachHandlers(){
   });
 
   document.querySelectorAll('[data-open]').forEach(el=>{
-    el.addEventListener('click', (e)=>{ e.stopPropagation(); state.openProjectId = el.dataset.open; render(); });
+    el.addEventListener('click', (e)=>{ e.stopPropagation(); state.confirmDeleteProject = false; state.openProjectId = el.dataset.open; render(); });
   });
 
   const newProjBtn = document.getElementById('tk-new-project');
@@ -1204,12 +1232,25 @@ function attachHandlers(){
   if(importBoard) importBoard.addEventListener('click', ()=>{ state.showImport = true; render(); });
 
   const panelClose = document.getElementById('tk-panel-close');
-  if(panelClose) panelClose.addEventListener('click', ()=>{ state.openProjectId = null; render(); });
+  if(panelClose) panelClose.addEventListener('click', ()=>{ state.openProjectId = null; state.confirmDeleteProject = false; render(); });
   const panelOverlay = document.getElementById('tk-panel-overlay');
-  if(panelOverlay) panelOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-panel-overlay'){ state.openProjectId = null; render(); } });
+  if(panelOverlay) panelOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-panel-overlay'){ state.openProjectId = null; state.confirmDeleteProject = false; render(); } });
 
   const statusSel = document.getElementById('tk-status-select');
   if(statusSel) statusSel.addEventListener('change', e=>{ setProjectStatus(state.openProjectId, e.target.value); });
+
+  const renameInput = document.querySelector('[data-rename-project]');
+  if(renameInput){
+    renameInput.addEventListener('change', e=> renameProject(renameInput.dataset.renameProject, e.target.value));
+    renameInput.addEventListener('keydown', e=>{ if(e.key==='Enter') renameInput.blur(); });
+  }
+
+  const deleteBtn = document.getElementById('tk-delete-project');
+  if(deleteBtn) deleteBtn.addEventListener('click', ()=>{ state.confirmDeleteProject = true; render(); });
+  const deleteCancel = document.getElementById('tk-delete-cancel');
+  if(deleteCancel) deleteCancel.addEventListener('click', ()=>{ state.confirmDeleteProject = false; render(); });
+  const deleteConfirm = document.getElementById('tk-delete-confirm');
+  if(deleteConfirm) deleteConfirm.addEventListener('click', ()=> deleteProject(state.openProjectId));
 
   document.querySelectorAll('[data-detail-step]').forEach(el=>{
     el.addEventListener('click', ()=>{
