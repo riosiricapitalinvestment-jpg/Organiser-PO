@@ -159,6 +159,14 @@ textarea.tk-textarea{width:100%;font-family:inherit;}
 .tk-plan-num{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#3d6a86;flex:0 0 auto;min-width:18px;margin-top:2px;}
 .tk-phase-header{font-family:'Fraunces',serif;font-weight:600;font-size:14.5px;padding:5px 0 5px 10px;margin:18px 0 8px;border-left:4px solid var(--rule);letter-spacing:-0.01em;}
 .tk-phase-header:first-child{margin-top:2px;}
+.tk-box-knowledge{background:#e3f1e6;border-color:#b7d9bf;}
+.tk-box-triage{background:#f2ebf6;border-color:#dbc9e4;}
+.tk-box-update{background:#23272b;border-color:#3a3f45;color:#e9e6dc;}
+.tk-box-update .tk-box-title{color:#e9e6dc;}
+.tk-box-update textarea.tk-textarea{background:#2f343a;color:#e9e6dc;border-color:#454b52;}
+.tk-box-update textarea.tk-textarea::placeholder{color:#9aa0a6;}
+.tk-box-update .tk-btn.small{background:#e9e6dc;color:#23272b;border-color:#e9e6dc;}
+.tk-box-update .tk-btn.small:hover{opacity:0.85;}
 .tk-mbx-badge{font-family:'IBM Plex Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.03em;color:var(--teal);border:1px solid var(--teal);padding:2px 6px;border-radius:10px;margin-left:6px;}
 .tk-mbx-badge.warn{color:var(--rust);border-color:var(--rust);}
 </style>
@@ -193,7 +201,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 05:03 UTC';
+const BUILD_VERSION = '2026-07-10 05:11 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -334,12 +342,12 @@ function phaseColor(id){
   return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
 const STATUS_META = {
-  todo:        {label:'Todo',        color:'var(--muted-2)'},
-  in_progress: {label:'In progress', color:'var(--brass)'},
-  waiting:     {label:'Waiting',     color:'var(--rust)'},
-  email_sent:  {label:'Email sent',  color:'var(--teal)'},
+  todo:        {label:'Todo',        color:'#948f7c'},
+  in_progress: {label:'In progress', color:'#b0793a'},
+  waiting:     {label:'Waiting',     color:'#a4463b'},
+  email_sent:  {label:'Email sent',  color:'#33606a'},
   done:        {label:'Done',        color:'#3d7a4f'},
-  future:      {label:'Future',      color:'var(--muted)'},
+  future:      {label:'Future',      color:'#7a7869'},
   confirm:     {label:'Confirm',     color:'#6b4fa0'}
 };
 
@@ -953,6 +961,17 @@ function groupStepsByPhase(steps, phases){
   return groups;
 }
 
+// Every step's number is derived once from its position in the FULL plan
+// (all steps, done or not, grouped/sorted by phase) — so the same step
+// always has the same number everywhere it's shown, including Digest.
+function computeStepNumbers(project){
+  const groups = groupStepsByPhase(project.steps, project.phases);
+  const map = {};
+  let n = 0;
+  groups.forEach(g=> g.items.forEach(s=>{ map[s.id] = ++n; }));
+  return map;
+}
+
 function render(){
   const mount = document.getElementById('tk-mount');
 
@@ -1031,26 +1050,30 @@ function render(){
 
   let body = '';
   if(state.tab==='digest'){
+    const numbersByProject = {};
+    state.projects.forEach(p=>{ numbersByProject[p.id] = computeStepNumbers(p); });
     const allOpen = [];
-    state.projects.filter(p=>p.status!=='done').forEach(p=> p.steps.filter(s=>!s.done).forEach(s=> allOpen.push({...s, projectId:p.id, projectName:p.name})));
+    state.projects.filter(p=>p.status!=='done').forEach(p=> p.steps.filter(s=>!s.done).forEach(s=> allOpen.push({...s, projectId:p.id, projectName:p.name, _num: numbersByProject[p.id][s.id]})));
     const doableNow = allOpen.filter(s=> s.canProceed!==false);
     const blockedExternal = allOpen.filter(s=> s.canProceed===false);
     const byPerson = {};
     allOpen.forEach(s=>{ if(s.assignee && s.assignee.trim()) (byPerson[s.assignee] ||= []).push(s); });
 
     const renderDigestList = (items)=> items.length ? items.map(s=>`
-      <div class="tk-action-row">
+      <div class="tk-action-row" style="background:${projectColor(s.projectId)}17;margin:0 -4px;padding:8px 4px;">
+        <span class="tk-plan-num">${s._num}</span>
         <div class="tk-check" data-proj="${s.projectId}" data-step="${s.id}"></div>
-        <div>
+        <div style="flex:1;">
           <div class="tk-action-text"><span class="tk-action-proj" data-open="${s.projectId}" style="color:${projectColor(s.projectId)};text-decoration-color:${projectColor(s.projectId)};">${escapeHtml(s.projectName)}</span>${escapeHtml(s.text)}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}</div>
           ${s.statusNote?`<div class="tk-step-meta">${escapeHtml(s.statusNote.split('\n').slice(-1)[0])}</div>`:''}
           ${s.blockedByNote?`<div class="tk-step-meta" style="color:var(--rust);">blocked: ${escapeHtml(s.blockedByNote)}</div>`:''}
+          <button class="tk-btn ghost small" data-help-step="${s.id}" data-help-project="${s.projectId}" style="margin-top:5px;">Help me with this</button>
         </div>
       </div>
     `).join('') : `<div class="tk-empty">Nothing here right now.</div>`;
 
     body = `
-      <div class="tk-note" style="margin-top:0;">One place, every project — what's actually doable today, what's stuck waiting on someone else, and what's specifically waiting on a named person.</div>
+      <div class="tk-note" style="margin-top:0;">One place, every project — what's actually doable today, what's stuck waiting on someone else, and what's specifically waiting on a named person. Each project has its own background tint, and numbers match what you'll see in that project's own Full plan.</div>
       <div class="tk-box" style="border-left:4px solid #3d7a4f;">
         <div class="tk-box-title">Can do today <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${doableNow.length}</span></div>
         ${renderDigestList(doableNow)}
@@ -1361,12 +1384,11 @@ function render(){
         if(s.blockedByNote) parts.push(s.blockedByNote);
         return `<div class="tk-step-meta" style="color:var(--rust);">${escapeHtml(parts.join(' — '))}</div>`;
       };
+      const stepNumbers = computeStepNumbers(p);
       const emailGroups = groupStepsByPhase(emailSteps, p.phases);
-      let triageCounter = 0;
-      emailGroups.forEach(g=>{ g.items = g.items.map(s=>({...s, _num: ++triageCounter})); });
+      emailGroups.forEach(g=>{ g.items = g.items.map(s=>({...s, _num: stepNumbers[s.id]})); });
       const manualGroups = groupStepsByPhase(manualSteps, p.phases);
-      let planCounter = 0;
-      manualGroups.forEach(g=>{ g.items = g.items.map(s=>({...s, _num: ++planCounter})); });
+      manualGroups.forEach(g=>{ g.items = g.items.map(s=>({...s, _num: stepNumbers[s.id]})); });
 
       const triageControls = (s)=> `
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">
@@ -1378,14 +1400,7 @@ function render(){
         </div>`;
 
       const summaryContent = `
-        <div class="tk-box" style="border-left:4px solid ${projectColor(p.id)};">
-          <div class="tk-box-title">Overview</div>
-          <div style="font-size:12.5px;margin-bottom:8px;"><span class="tk-user-label">status</span> ${escapeHtml(p.status)}</div>
-          ${p.params.length ? p.params.filter(pr=>pr.key).map(pr=>`<div style="font-size:12.5px;color:var(--muted);">${escapeHtml(pr.key)}: ${escapeHtml(pr.value)}</div>`).join('') : ''}
-          ${deadlines.length ? `<div style="margin-top:10px;"><span class="tk-user-label">upcoming deadlines</span>${deadlines.map(d=>`<div style="font-size:12.5px;margin-top:3px;">${escapeHtml(d.text)} — <span class="tk-action-due">due ${fmtDueDate(d.dueDate)}</span></div>`).join('')}</div>` : ''}
-        </div>
-
-        <div class="tk-box">
+        <div class="tk-box tk-box-knowledge">
           <div class="tk-box-title">Knowledge base <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${p.knowledge.length + state.globalKnowledge.length}</span></div>
           ${(p.knowledge.length || state.globalKnowledge.length) ? `
             ${p.knowledge.map(k=>`
@@ -1416,7 +1431,7 @@ function render(){
           </div>
         </div>
 
-        <div class="tk-box">
+        <div class="tk-box tk-box-update">
           <div class="tk-box-title">Tell it what you did <span style="font-weight:400;font-family:'Inter',sans-serif;font-size:11px;">it figures out what changed</span></div>
           <div class="tk-add-update">
             <textarea class="tk-textarea" id="tk-detail-update-text" placeholder="e.g. Called Clinpath and got the FetchAPI credentials, so the polling cron can start"></textarea>
@@ -1426,7 +1441,7 @@ function render(){
           </div>
         </div>
 
-        <div class="tk-box">
+        <div class="tk-box tk-box-triage">
           <div class="tk-box-title">Needs triage (from email) <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
           ${emailGroups.length ? emailGroups.map(g=>`
             ${g.label ? `<div class="tk-phase-header" style="${g.id?'border-left-color:'+phaseColor(g.id)+';color:'+phaseColor(g.id)+';':''}">${escapeHtml(g.label)}</div>` : ''}
@@ -1453,7 +1468,7 @@ function render(){
           ${manualGroups.length ? manualGroups.map(g=>`
             ${g.label ? `<div class="tk-phase-header" style="${g.id?'border-left-color:'+phaseColor(g.id)+';color:'+phaseColor(g.id)+';':''}">${escapeHtml(g.label)}</div>` : ''}
             ${g.items.map(s=>`
-              <div class="tk-action-row" style="${s.done?'opacity:0.55;':''}">
+              <div class="tk-action-row" style="background:${(STATUS_META[s.status]&&STATUS_META[s.status].color)||'#948f7c'}1c;margin:0 -4px;padding:8px 4px;${s.done?'opacity:0.55;':''}">
                 <span class="tk-plan-num">${s._num}</span>
                 <div class="tk-check ${s.done?'done':''}" data-proj="${p.id}" data-step="${s.id}"></div>
                 <div>
@@ -1483,6 +1498,13 @@ function render(){
         <div class="tk-box">
           <div class="tk-box-title">Ledger</div>
           ${projUpdates.length ? projUpdates.slice(0,15).map(u=>renderLedgerEntry(u,false)).join('') : `<div class="tk-empty">No entries yet.</div>`}
+        </div>
+
+        <div class="tk-box" style="border-left:4px solid ${projectColor(p.id)};">
+          <div class="tk-box-title">Overview</div>
+          <div style="font-size:12.5px;margin-bottom:8px;"><span class="tk-user-label">status</span> ${escapeHtml(p.status)}</div>
+          ${p.params.length ? p.params.filter(pr=>pr.key).map(pr=>`<div style="font-size:12.5px;color:var(--muted);">${escapeHtml(pr.key)}: ${escapeHtml(pr.value)}</div>`).join('') : ''}
+          ${deadlines.length ? `<div style="margin-top:10px;"><span class="tk-user-label">upcoming deadlines</span>${deadlines.map(d=>`<div style="font-size:12.5px;margin-top:3px;">${escapeHtml(d.text)} — <span class="tk-action-due">due ${fmtDueDate(d.dueDate)}</span></div>`).join('')}</div>` : ''}
         </div>
 
         <div class="tk-box">
@@ -1910,8 +1932,9 @@ function attachHandlers(){
   });
 
   document.querySelectorAll('[data-help-step]').forEach(el=> el.addEventListener('click', ()=>{
-    const p = state.projects.find(p=>p.id===state.openProjectId);
-    const s = p.steps.find(x=>x.id===el.dataset.helpStep);
+    const projId = el.dataset.helpProject || state.openProjectId;
+    const p = state.projects.find(p=>p.id===projId);
+    const s = p && p.steps.find(x=>x.id===el.dataset.helpStep);
     if(!p || !s) return;
     state.helpStepText = buildStepHelpPrompt(p, s);
     state.helpStepCopied = false;
