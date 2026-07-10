@@ -201,7 +201,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 05:11 UTC';
+const BUILD_VERSION = '2026-07-10 05:24 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -1262,7 +1262,10 @@ function render(){
         const neverConnected = r.status==='needs_reauth' && !r.lastChecked;
         const statusLabel = r.status==='needs_reauth' ? (neverConnected ? 'Not connected' : 'Needs reconnect') : 'Connected';
         const btnLabel = neverConnected ? 'Connect' : 'Reconnect';
-        const recentEmails = allEmailItems.filter(e=>e.sourceResourceId===r.id).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,5);
+        const recentEmails = allEmailItems
+          .filter(e=>e.sourceResourceId===r.id)
+          .filter(e=> !e.done || (e.doneAt && (Date.now()-e.doneAt) < 24*60*60*1000))
+          .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,5);
         return `
           <div class="tk-box" style="border-left:4px solid ${mailboxColor(r.id)};">
             <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;">
