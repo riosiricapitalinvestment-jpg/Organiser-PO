@@ -155,7 +155,9 @@ textarea.tk-textarea{width:100%;font-family:inherit;}
 
 const DEFAULT_USERS = ['You'];
 // Update this once the mailbox ingestion backend is chosen — shown as a small note under Mailboxes.
-const INGESTION_SYSTEM_LABEL = 'Supabase Edge Function, every 15 minutes';
+const INGESTION_SYSTEM_LABEL = 'Supabase Edge Function';
+// Keep this in sync with whatever schedule is set in Supabase Cron.
+const INGESTION_POLL_MINUTES = 5;
 const RESOURCE_TYPES = [
   {key:'mailbox', label:'Mailbox', plural:'Mailboxes'},
   {key:'guideline', label:'Guideline', plural:'Guidelines'},
@@ -173,7 +175,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 00:46 UTC';
+const BUILD_VERSION = '2026-07-10 01:59 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -300,6 +302,11 @@ function projectColor(id){
   for(const c of String(id)) h = (h*31 + c.charCodeAt(0)) >>> 0;
   return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
+function mailboxColor(id){
+  let h = 0;
+  for(const c of String(id)) h = (h*37 + c.charCodeAt(0)) >>> 0;
+  return PROJECT_COLORS[h % PROJECT_COLORS.length];
+}
 
 async function seedIfEmpty(){
   const existing = await sbSelect('projects', 'select=id&limit=1');
@@ -383,7 +390,7 @@ async function loadAll(){
       return merged;
     });
 
-    state.updates = (updatesRows||[]).map(u=>({id:u.id, projectId:u.project_id, type:u.type, text:u.text, user:u.user_name, ts: new Date(u.ts).getTime()}));
+    state.updates = (updatesRows||[]).map(u=>({id:u.id, projectId:u.project_id, type:u.type, text:u.text, user:u.user_name, ts: new Date(u.ts).getTime(), sourceResourceId:u.source_resource_id||null}));
 
     state.users = (usersRows||[]).map(u=>u.name);
     if(!state.users.length) state.users = DEFAULT_USERS.slice();
@@ -398,7 +405,7 @@ async function loadAll(){
       const steps = (tasksRows||[]).filter(x=>x.project_id===p.id).map(x=>({
         id:x.id, text:x.text, done:x.done, doneBy:x.done_by, doneAt: x.done_at ? new Date(x.done_at).getTime() : null,
         assignee:x.assignee||'', dueDate:x.due_date||'', instructions:x.instructions||'', statusNote:x.status_note||'', contextTag:x.context_tag||'',
-        source:x.source||'manual'
+        source:x.source||'manual', sourceResourceId:x.source_resource_id||null
       }));
       return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps};
     });
@@ -634,6 +641,17 @@ function fmtAgo(ts){
   const days = Math.floor(hrs/24);
   return 'checked ' + days + 'd ago';
 }
+function nextPollCountdown(){
+  const mailboxes = state.resources.filter(r=>r.type==='mailbox' && r.lastChecked);
+  if(!mailboxes.length) return 'next check: waiting on first run';
+  const mostRecent = Math.max(...mailboxes.map(r=>r.lastChecked));
+  const nextAt = mostRecent + INGESTION_POLL_MINUTES*60000;
+  const remaining = nextAt - Date.now();
+  if(remaining <= 0) return 'next check: any moment now';
+  const mins = Math.floor(remaining/60000);
+  const secs = Math.floor((remaining%60000)/1000);
+  return 'next check in ' + (mins>0 ? mins+'m ' : '') + secs + 's';
+}
 
 async function importProjectJSON(raw){
   let data;
@@ -786,6 +804,7 @@ function render(){
       <div class="tk-tab ${state.tab==='calendar'?'active':''}" data-tab="calendar">Calendar</div>
       <div class="tk-tab ${state.tab==='handoffs'?'active':''}" data-tab="handoffs">Handoffs</div>
       <div class="tk-tab ${state.tab==='finance'?'active':''}" data-tab="finance">Finance</div>
+      <div class="tk-tab ${state.tab==='mailboxes'?'active':''}" data-tab="mailboxes">Mailboxes</div>
       <div class="tk-tab ${state.tab==='board'?'active':''}" data-tab="board">Board</div>
       <div class="tk-tab ${state.tab==='resources'?'active':''}" data-tab="resources">Resources</div>
     </div>`;
@@ -977,6 +996,29 @@ function render(){
         <button class="tk-btn ghost small" id="tk-inv-add">Add invoice</button>
       </div>
     `;
+  } else if(state.tab==='mailboxes'){
+    const mailboxes = state.resources.filter(r=>r.type==='mailbox');
+    body = `
+      <div class="tk-note" style="margin-top:0;margin-bottom:18px;">Checked automatically every <strong>${INGESTION_POLL_MINUTES} minutes</strong> via ${escapeHtml(INGESTION_SYSTEM_LABEL)}. <span style="font-family:'IBM Plex Mono',monospace;">${escapeHtml(nextPollCountdown())}</span> Each mailbox's colour square is used consistently everywhere that mailbox is the source — task badges, ledger entries — so you can trace an item back to its inbox at a glance.</div>
+      ${mailboxes.length ? mailboxes.map(r=>{
+        const linkedProjects = state.projects.filter(p=>p.resourceIds.includes(r.id));
+        const neverConnected = r.status==='needs_reauth' && !r.lastChecked;
+        const statusLabel = r.status==='needs_reauth' ? (neverConnected ? 'Not connected' : 'Needs reconnect') : 'Connected';
+        const btnLabel = neverConnected ? 'Connect' : 'Reconnect';
+        return `
+          <div class="tk-res-row">
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <span style="display:inline-block;width:16px;height:16px;flex:0 0 16px;margin-top:2px;background:${mailboxColor(r.id)};border-radius:3px;"></span>
+              <div>
+                <div class="tk-res-name">${escapeHtml(r.name)} <span class="tk-mbx-badge ${r.status==='needs_reauth'?'warn':''}">${statusLabel}</span></div>
+                <div class="tk-res-used">${fmtAgo(r.lastChecked)}</div>
+                <div class="tk-res-used">linked projects: ${linkedProjects.length ? linkedProjects.map(p=>`<span class="tk-chip" style="border-color:${projectColor(p.id)};color:${projectColor(p.id)};">${escapeHtml(p.name)}</span>`).join('') : '— none yet'}</div>
+              </div>
+            </div>
+            <button class="tk-btn ghost small" data-connect-mbx="${r.id}">${btnLabel}</button>
+          </div>`;
+      }).join('') : `<div class="tk-empty">No mailboxes yet — add one from the Resources tab.</div>`}
+    `;
   } else if(state.tab==='board'){
     const cols = [{key:'active', label:'Active'},{key:'waiting', label:'Waiting'},{key:'done', label:'Done'}];
     body = `
@@ -1013,7 +1055,7 @@ function render(){
         return `
           <div class="tk-res-group">
             <div class="tk-section-label">${t.plural||t.label+'s'}</div>
-            ${t.key==='mailbox' ? `<div class="tk-note" style="margin-top:0;margin-bottom:14px;">Checked automatically via — <em>${escapeHtml(INGESTION_SYSTEM_LABEL)}</em>. This line updates once we've chosen the ingestion backend.</div>` : ''}
+            ${t.key==='mailbox' ? `<div class="tk-note" style="margin-top:0;margin-bottom:14px;">Checked automatically every <strong>${INGESTION_POLL_MINUTES} minutes</strong> via ${escapeHtml(INGESTION_SYSTEM_LABEL)}. <span style="font-family:'IBM Plex Mono',monospace;">${escapeHtml(nextPollCountdown())}</span></div>` : ''}
             ${items.map(r=>{
               const usedBy = state.projects.filter(p=>p.resourceIds.includes(r.id));
               if(t.key==='mailbox'){
@@ -1112,7 +1154,7 @@ function render(){
               <div class="tk-step-row">
                 <div class="tk-check ${s.done?'done':''}" data-detail-step="${s.id}"></div>
                 <div style="flex:1;">
-                  <div class="tk-step-text ${s.done?'done':''}">${escapeHtml(s.text)}${s.source==='email'?'<span class="tk-mbx-badge">via email</span>':''}</div>
+                  <div class="tk-step-text ${s.done?'done':''}">${escapeHtml(s.text)}${s.source==='email'?`<span class="tk-mbx-badge" style="${s.sourceResourceId?'border-color:'+mailboxColor(s.sourceResourceId)+';color:'+mailboxColor(s.sourceResourceId)+';':''}">via email</span>`:''}</div>
                   ${s.done && s.doneBy ? `<div class="tk-step-meta">done by ${escapeHtml(s.doneBy)} · ${fmtTime(s.doneAt)}</div>` : ''}
                   <div class="tk-step-inline">
                     <input class="tk-input" data-assignee-step="${s.id}" placeholder="Assignee" value="${escapeHtml(s.assignee||'')}" />
@@ -1264,11 +1306,12 @@ function render(){
 
 function renderLedgerEntry(u, showProject){
   const proj = state.projects.find(p=>p.id===u.projectId);
+  const mbxSwatch = u.sourceResourceId ? `<span style="display:inline-block;width:8px;height:8px;background:${mailboxColor(u.sourceResourceId)};margin-right:6px;vertical-align:middle;" title="Sourced from a connected mailbox"></span>` : '';
   return `
     <div class="tk-ledger-entry">
       <div class="tk-stamp ${u.type==='system'?'system':''}" style="--tilt:${tiltFor(u.id)}">${escapeHtml(initials(u.user))}<br/>${fmtTime(u.ts)}</div>
       <div style="flex:1;min-width:0;">
-        <div class="tk-ledger-text">${showProject && proj ? `<span class="tk-action-proj" data-open="${proj.id}" style="color:${projectColor(proj.id)};text-decoration-color:${projectColor(proj.id)};">${escapeHtml(proj.name)}</span>` : ''}${escapeHtml(u.text)}</div>
+        <div class="tk-ledger-text">${mbxSwatch}${showProject && proj ? `<span class="tk-action-proj" data-open="${proj.id}" style="color:${projectColor(proj.id)};text-decoration-color:${projectColor(proj.id)};">${escapeHtml(proj.name)}</span>` : ''}${escapeHtml(u.text)}</div>
         <div class="tk-ledger-meta">${escapeHtml(u.user)}${u.type==='system'?' · automated':''}</div>
       </div>
       <button class="tk-ledger-del" data-del-update="${u.id}" title="Delete this entry">&times;</button>
@@ -1465,7 +1508,7 @@ function checkOAuthRedirectResult(){
 
 checkOAuthRedirectResult();
 loadAll();
-setInterval(()=>{ if(state.tab==='resources') render(); }, 60000);
+setInterval(()=>{ if(state.tab==='resources' || state.tab==='mailboxes') render(); }, 1000);
 })();
 </script>
 
