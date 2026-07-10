@@ -187,7 +187,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 03:36 UTC';
+const BUILD_VERSION = '2026-07-10 03:47 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -298,7 +298,7 @@ const SEED_UPDATE_TEXT = {
 const SEED_USERS = ['You','Emma'];
 
 let state = {
-  projects: [], updates: [], resources: [], invoices: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
+  projects: [], updates: [], resources: [], invoices: [], globalKnowledge: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
   tab: 'today', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
   justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary', updateInFlight: false
@@ -407,6 +407,14 @@ async function loadAll(){
       console.error('phases table not available yet', e);
       phasesRows = [];
     }
+    let knowledgeAllRows = [];
+    try{
+      knowledgeAllRows = await sbSelect('knowledge_entries', 'select=*&order=created_at.desc');
+    }catch(e){
+      console.error('knowledge_entries table not available yet', e);
+      knowledgeAllRows = [];
+    }
+    state.globalKnowledge = knowledgeAllRows.filter(k=>!k.project_id).map(k=>({id:k.id, title:k.title, content:k.content, source:k.source||'manual'}));
 
     const mbxByResource = {};
     (mbxRows||[]).forEach(m=> mbxByResource[m.resource_id] = m);
@@ -433,6 +441,7 @@ async function loadAll(){
       const links = (linksRows||[]).filter(x=>x.project_id===p.id).map(x=>x.linked_project_id);
       const resourceIds = (prRows||[]).filter(x=>x.project_id===p.id).map(x=>x.resource_id);
       const phases = phasesRows.filter(x=>x.project_id===p.id).map(x=>({id:x.id, name:x.name, orderIndex:x.order_index||0}));
+      const knowledge = knowledgeAllRows.filter(k=>k.project_id===p.id).map(k=>({id:k.id, title:k.title, content:k.content, source:k.source||'manual'}));
       const steps = (tasksRows||[]).filter(x=>x.project_id===p.id).map(x=>({
         id:x.id, text:x.text, done:x.done, doneBy:x.done_by, doneAt: x.done_at ? new Date(x.done_at).getTime() : null,
         assignee:x.assignee||'', dueDate:x.due_date||'', instructions:x.instructions||'', statusNote:x.status_note||'', contextTag:x.context_tag||'',
@@ -442,7 +451,7 @@ async function loadAll(){
         blockedByTaskId: x.blocked_by_task_id||null, blockedByNote: x.blocked_by_note||'',
         canProceed: x.can_proceed!==undefined ? x.can_proceed : true, followUpDate: x.follow_up_date||''
       }));
-      return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps, phases};
+      return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps, phases, knowledge};
     });
 
     state.loadError = null;
@@ -589,6 +598,23 @@ function deletePhase(projectId, phaseId){
   render();
   sbDelete('phases', 'id=eq.'+phaseId).catch(e=> console.error('deletePhase failed', e));
 }
+async function addKnowledge(projectId, title, content, isGeneral){
+  if(!title || !title.trim() || !content || !content.trim()) return;
+  const local = {id:'tmp-'+uid(), title:title.trim(), content:content.trim(), source:'manual'};
+  if(isGeneral) state.globalKnowledge.unshift(local);
+  else { const p = state.projects.find(p=>p.id===projectId); if(!p) return; p.knowledge.unshift(local); }
+  render();
+  try{
+    const [row] = await sbInsert('knowledge_entries', [{project_id: isGeneral ? null : projectId, title:local.title, content:local.content, source:'manual'}]);
+    local.id = row.id;
+  }catch(e){ console.error('addKnowledge failed', e); }
+}
+function deleteKnowledge(projectId, knowledgeId, isGeneral){
+  if(isGeneral) state.globalKnowledge = state.globalKnowledge.filter(k=>k.id!==knowledgeId);
+  else { const p = state.projects.find(p=>p.id===projectId); if(p) p.knowledge = p.knowledge.filter(k=>k.id!==knowledgeId); }
+  render();
+  sbDelete('knowledge_entries', 'id=eq.'+knowledgeId).catch(e=> console.error('deleteKnowledge failed', e));
+}
 async function addStep(projectId, text, assignee, dueDate){
   if(!text || !text.trim()) return;
   const p = state.projects.find(p=>p.id===projectId); if(!p) return;
@@ -683,7 +709,7 @@ async function createProject(name, stepLines, status, linkIds, resIds){
     if(resIds && resIds.length){
       await sbInsert('project_resources', resIds.map(rid=>({project_id:id, resource_id:rid})));
     }
-    state.projects.push({id, name:name.trim(), status: status||'active', createdAt: Date.now(), steps, params:[], links: linkIds||[], resourceIds: resIds||[], phases:[]});
+    state.projects.push({id, name:name.trim(), status: status||'active', createdAt: Date.now(), steps, params:[], links: linkIds||[], resourceIds: resIds||[], phases:[], knowledge:[]});
     addUpdate(id, 'Project created'+((linkIds&&linkIds.length)||(resIds&&resIds.length) ? ', linked to existing projects/resources so shared context carries over.' : '.'), 'manual', state.currentUser);
     state.openProjectId = id;
   }catch(e){ console.error('createProject failed', e); }
@@ -799,7 +825,7 @@ async function importProjectJSON(raw){
         const inserted = await sbInsert('project_params', item.params.map(pr=>({project_id:id, key:pr.key||'', value:pr.value||''})));
         params = inserted.map(p=>({id:p.id, key:p.key||'', value:p.value||''}));
       }
-      state.projects.push({id, name:item.name, status:item.status||'active', createdAt:Date.now(), steps, params, links, resourceIds, phases:[]});
+      state.projects.push({id, name:item.name, status:item.status||'active', createdAt:Date.now(), steps, params, links, resourceIds, phases:[], knowledge:[]});
       nameToId[item.name.toLowerCase()] = id;
       addUpdate(id, 'Project imported.', 'manual', state.currentUser);
     }catch(e){
@@ -829,6 +855,12 @@ function generateBrief(project){
     lines.push('INTERDEPENDENCIES:');
     linkedProjects.forEach(lp=> lines.push('  - Linked project: ' + lp.name + ' (' + lp.status + ')'));
     linkedResources.forEach(r=> lines.push('  - Shared ' + resourceLabel(r).toLowerCase() + ': ' + r.name + (r.detail ? ' — ' + r.detail : '')));
+    lines.push('');
+  }
+  if(p.knowledge.length || state.globalKnowledge.length){
+    lines.push('KNOWLEDGE BASE:');
+    p.knowledge.forEach(k=> lines.push('  - ' + k.title + ': ' + k.content));
+    state.globalKnowledge.forEach(k=> lines.push('  - [general] ' + k.title + ': ' + k.content));
     lines.push('');
   }
   lines.push('STEPS:');
@@ -1320,6 +1352,30 @@ function render(){
         </div>` : ''}
 
         <div class="tk-box">
+          <div class="tk-box-title">Knowledge base <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${p.knowledge.length + state.globalKnowledge.length}</span></div>
+          ${(p.knowledge.length || state.globalKnowledge.length) ? `
+            ${p.knowledge.map(k=>`
+              <div class="tk-res-row">
+                <div><div class="tk-res-name">${escapeHtml(k.title)}</div><div class="tk-res-detail">${escapeHtml(k.content)}</div></div>
+                <span class="rm" data-del-knowledge="${k.id}" data-knowledge-general="0">&times;</span>
+              </div>
+            `).join('')}
+            ${state.globalKnowledge.map(k=>`
+              <div class="tk-res-row">
+                <div><div class="tk-res-name">${escapeHtml(k.title)} <span class="tk-mbx-badge">general</span></div><div class="tk-res-detail">${escapeHtml(k.content)}</div></div>
+                <span class="rm" data-del-knowledge="${k.id}" data-knowledge-general="1">&times;</span>
+              </div>
+            `).join('')}
+          ` : `<div class="tk-empty">Nothing recorded yet — tell it something worth remembering in the update box and it'll land here automatically.</div>`}
+          <div class="tk-addstep" style="margin-top:10px;">
+            <input class="tk-input" id="tk-kn-title" placeholder="Title" style="flex:0 0 140px;" />
+            <input class="tk-input" id="tk-kn-content" placeholder="Content — the fact/note/URL itself" style="flex:1;" />
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);"><input type="checkbox" id="tk-kn-general" /> general</label>
+            <button class="tk-btn ghost small" id="tk-kn-add">Add</button>
+          </div>
+        </div>
+
+        <div class="tk-box">
           <div class="tk-box-title">Ledger</div>
           ${projUpdates.length ? projUpdates.slice(0,15).map(u=>renderLedgerEntry(u,false)).join('') : `<div class="tk-empty">No entries yet.</div>`}
         </div>
@@ -1715,6 +1771,17 @@ function attachHandlers(){
   if(addPhaseBtn) addPhaseBtn.addEventListener('click', ()=> addPhase(state.openProjectId, document.getElementById('tk-addphase-input').value));
   document.querySelectorAll('[data-rename-phase]').forEach(el=> el.addEventListener('change', e=> renamePhase(state.openProjectId, el.dataset.renamePhase, e.target.value)));
   document.querySelectorAll('[data-del-phase]').forEach(el=> el.addEventListener('click', ()=> deletePhase(state.openProjectId, el.dataset.delPhase)));
+
+  const knAddBtn = document.getElementById('tk-kn-add');
+  if(knAddBtn) knAddBtn.addEventListener('click', ()=>{
+    addKnowledge(
+      state.openProjectId,
+      document.getElementById('tk-kn-title').value,
+      document.getElementById('tk-kn-content').value,
+      document.getElementById('tk-kn-general').checked
+    );
+  });
+  document.querySelectorAll('[data-del-knowledge]').forEach(el=> el.addEventListener('click', ()=> deleteKnowledge(state.openProjectId, el.dataset.delKnowledge, el.dataset.knowledgeGeneral==='1')));
 
   document.querySelectorAll('[data-unlink]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.unlink)));
   document.querySelectorAll('[data-link]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.link)));
