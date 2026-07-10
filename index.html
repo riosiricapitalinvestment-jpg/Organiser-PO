@@ -201,7 +201,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 05:24 UTC';
+const BUILD_VERSION = '2026-07-10 05:56 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -211,6 +211,7 @@ const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
 const GOOGLE_CLIENT_ID = '696960566917-75kc3k9pknnsb1bg7ecj3aerso871k8b.apps.googleusercontent.com';
 const GMAIL_REDIRECT_URI = SUPABASE_URL + '/functions/v1/gmail-oauth-callback';
 const APPLY_UPDATE_URL = SUPABASE_URL + '/functions/v1/apply-update';
+const SEARCH_MAILBOX_URL = SUPABASE_URL + '/functions/v1/search-mailbox';
 const UPDATE_SECRET = '7zDap7wHovik6rVqHIyQ/s1baq1SIIho';
 function buildGoogleAuthUrl(resourceId){
   const params = new URLSearchParams({
@@ -316,7 +317,7 @@ let state = {
   tab: 'digest', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
   justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary', updateInFlight: false,
-  helpStepText: null, helpStepCopied: false
+  helpStepText: null, helpStepCopied: false, searchInFlight: false, searchResult: null
 };
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -530,6 +531,30 @@ async function applyAiUpdate(projectId, text){
   }
   state.updateInFlight = false;
   await loadAll();
+}
+async function searchMailbox(projectId, query){
+  if(!query || !query.trim()) return;
+  state.searchInFlight = true; state.searchResult = null; render();
+  try{
+    const res = await fetch(SEARCH_MAILBOX_URL, {
+      method:'POST',
+      headers: {'Content-Type':'application/json', 'x-update-secret': UPDATE_SECRET},
+      body: JSON.stringify({ project_id: projectId, query: query.trim(), user: state.currentUser })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      console.error('searchMailbox failed', data);
+      state.searchResult = {ok:false, text: 'Search failed: ' + (data.error || res.status)};
+    } else {
+      state.searchResult = {ok:true, text: data.summary, foundCount: data.foundCount, taskCreated: data.taskCreated};
+    }
+  }catch(e){
+    console.error('searchMailbox exception', e);
+    state.searchResult = {ok:false, text: 'Could not reach the search function: ' + e.message};
+  }
+  state.searchInFlight = false;
+  render();
+  if(state.searchResult && state.searchResult.ok) await loadAll();
 }
 async function addUpdate(projectId, text, type, user){
   if(!text || !text.trim()) return;
@@ -1444,6 +1469,17 @@ function render(){
           </div>
         </div>
 
+        <div class="tk-box">
+          <div class="tk-box-title">Search mailbox <span style="font-weight:400;font-family:'Inter',sans-serif;font-size:11px;">looks back through history — different from the box above, which only logs what you tell it</span></div>
+          ${linkedMailboxes.length ? `
+            <div class="tk-quicklog" style="margin:0;padding:0;border:none;background:none;">
+              <input class="tk-input" id="tk-search-mbx-query" placeholder="e.g. safaricom" style="flex:1;" />
+              <button class="tk-btn ghost small" id="tk-search-mbx-btn">${state.searchInFlight ? 'Searching…' : 'Search'}</button>
+            </div>
+            ${state.searchResult ? `<div class="tk-step-meta" style="margin-top:8px;${state.searchResult.ok?'':'color:var(--rust);'}">${escapeHtml(state.searchResult.text)}${state.searchResult.ok && state.searchResult.taskCreated ? ' — a follow-up task was added to the plan.' : ''}</div>` : ''}
+          ` : `<div class="tk-empty">No mailbox linked to this project yet — attach one under Shared resources in Settings first.</div>`}
+        </div>
+
         <div class="tk-box tk-box-triage">
           <div class="tk-box-title">Needs triage (from email) <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
           ${emailGroups.length ? emailGroups.map(g=>`
@@ -1884,6 +1920,15 @@ function attachHandlers(){
     const ta = document.getElementById('tk-detail-update-text');
     if(ta.value.trim()) applyAiUpdate(state.openProjectId, ta.value);
   });
+
+  const searchMbxBtn = document.getElementById('tk-search-mbx-btn');
+  if(searchMbxBtn) searchMbxBtn.addEventListener('click', ()=>{
+    if(state.searchInFlight) return;
+    const q = document.getElementById('tk-search-mbx-query');
+    if(q.value.trim()) searchMailbox(state.openProjectId, q.value);
+  });
+  const searchMbxInput = document.getElementById('tk-search-mbx-query');
+  if(searchMbxInput) searchMbxInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ document.getElementById('tk-search-mbx-btn').click(); } });
 
   const addParamBtn = document.getElementById('tk-add-param');
   if(addParamBtn) addParamBtn.addEventListener('click', ()=> addParam(state.openProjectId));
