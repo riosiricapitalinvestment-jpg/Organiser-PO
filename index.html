@@ -187,7 +187,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 02:12 UTC';
+const BUILD_VERSION = '2026-07-10 02:34 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -417,7 +417,8 @@ async function loadAll(){
       const steps = (tasksRows||[]).filter(x=>x.project_id===p.id).map(x=>({
         id:x.id, text:x.text, done:x.done, doneBy:x.done_by, doneAt: x.done_at ? new Date(x.done_at).getTime() : null,
         assignee:x.assignee||'', dueDate:x.due_date||'', instructions:x.instructions||'', statusNote:x.status_note||'', contextTag:x.context_tag||'',
-        source:x.source||'manual', sourceResourceId:x.source_resource_id||null, triageStatus:x.triage_status||'new'
+        source:x.source||'manual', sourceResourceId:x.source_resource_id||null, triageStatus:x.triage_status||'new',
+        createdAt: x.created_at ? new Date(x.created_at).getTime() : null
       }));
       return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps};
     });
@@ -1020,6 +1021,8 @@ function render(){
     `;
   } else if(state.tab==='mailboxes'){
     const mailboxes = state.resources.filter(r=>r.type==='mailbox');
+    const allEmailItems = [];
+    state.projects.forEach(p=> p.steps.filter(s=>s.source==='email').forEach(s=> allEmailItems.push({...s, projectId:p.id, projectName:p.name})));
     body = `
       <div class="tk-note" style="margin-top:0;margin-bottom:18px;">Checked automatically every <strong>${INGESTION_POLL_MINUTES} minutes</strong> via ${escapeHtml(INGESTION_SYSTEM_LABEL)}. <span style="font-family:'IBM Plex Mono',monospace;">${escapeHtml(nextPollCountdown())}</span> Each mailbox's colour square is used consistently everywhere that mailbox is the source — task badges, ledger entries — so you can trace an item back to its inbox at a glance.</div>
       ${mailboxes.length ? mailboxes.map(r=>{
@@ -1027,17 +1030,32 @@ function render(){
         const neverConnected = r.status==='needs_reauth' && !r.lastChecked;
         const statusLabel = r.status==='needs_reauth' ? (neverConnected ? 'Not connected' : 'Needs reconnect') : 'Connected';
         const btnLabel = neverConnected ? 'Connect' : 'Reconnect';
+        const recentEmails = allEmailItems.filter(e=>e.sourceResourceId===r.id).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,5);
         return `
-          <div class="tk-res-row">
-            <div style="display:flex;gap:10px;align-items:flex-start;">
-              <span style="display:inline-block;width:16px;height:16px;flex:0 0 16px;margin-top:2px;background:${mailboxColor(r.id)};border-radius:3px;"></span>
-              <div>
-                <div class="tk-res-name">${escapeHtml(r.name)} <span class="tk-mbx-badge ${r.status==='needs_reauth'?'warn':''}">${statusLabel}</span></div>
-                <div class="tk-res-used">${fmtAgo(r.lastChecked)}</div>
-                <div class="tk-res-used">linked projects: ${linkedProjects.length ? linkedProjects.map(p=>`<span class="tk-chip" style="border-color:${projectColor(p.id)};color:${projectColor(p.id)};">${escapeHtml(p.name)}</span>`).join('') : '— none yet'}</div>
+          <div class="tk-box" style="border-left:4px solid ${mailboxColor(r.id)};">
+            <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;">
+              <div style="display:flex;gap:10px;align-items:flex-start;">
+                <span style="display:inline-block;width:16px;height:16px;flex:0 0 16px;margin-top:2px;background:${mailboxColor(r.id)};border-radius:3px;"></span>
+                <div>
+                  <div class="tk-res-name">${escapeHtml(r.name)} <span class="tk-mbx-badge ${r.status==='needs_reauth'?'warn':''}">${statusLabel}</span></div>
+                  <div class="tk-res-used">${fmtAgo(r.lastChecked)}</div>
+                  <div class="tk-res-used">linked projects: ${linkedProjects.length ? linkedProjects.map(p=>`<span class="tk-chip" style="border-color:${projectColor(p.id)};color:${projectColor(p.id)};">${escapeHtml(p.name)}</span>`).join('') : '— none yet'}</div>
+                </div>
               </div>
+              <button class="tk-btn ghost small" data-connect-mbx="${r.id}">${btnLabel}</button>
             </div>
-            <button class="tk-btn ghost small" data-connect-mbx="${r.id}">${btnLabel}</button>
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-soft);">
+              <div class="tk-user-label" style="margin-bottom:6px;">recent emails</div>
+              ${recentEmails.length ? recentEmails.map(e=>`
+                <div class="tk-action-row">
+                  <div class="tk-check ${e.done?'done':''}" data-proj="${e.projectId}" data-step="${e.id}"></div>
+                  <div>
+                    <div class="tk-action-text"><span class="tk-action-proj" data-open="${e.projectId}" style="color:${projectColor(e.projectId)};text-decoration-color:${projectColor(e.projectId)};">${escapeHtml(e.projectName)}</span>${escapeHtml(e.text)}</div>
+                    <div class="tk-step-meta">found in: ${escapeHtml(r.name)}${e.createdAt?' · '+fmtAgo(e.createdAt).replace('checked ',''):''}</div>
+                  </div>
+                </div>
+              `).join('') : `<div class="tk-empty">No emails routed from this mailbox yet.</div>`}
+            </div>
           </div>`;
       }).join('') : `<div class="tk-empty">No mailboxes yet — add one from the Resources tab.</div>`}
     `;
@@ -1144,16 +1162,19 @@ function render(){
 
         <div class="tk-box">
           <div class="tk-box-title">Emails <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
-          ${emailSteps.length ? emailSteps.map(s=>`
+          ${emailSteps.length ? emailSteps.map(s=>{
+            const srcResource = s.sourceResourceId ? state.resources.find(r=>r.id===s.sourceResourceId) : null;
+            return `
             <div class="tk-triage-row">
               ${s.sourceResourceId?`<span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;margin-top:3px;background:${mailboxColor(s.sourceResourceId)};border-radius:2px;"></span>`:''}
               <div style="flex:1;">
                 <div style="font-size:13px;">${escapeHtml(s.text)}</div>
                 ${s.instructions?`<div class="tk-step-meta">${escapeHtml(s.instructions)}</div>`:''}
+                ${srcResource?`<div class="tk-step-meta">found in: ${escapeHtml(srcResource.name)}</div>`:''}
                 ${triageControls(s)}
               </div>
             </div>
-          `).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
+          `;}).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
         </div>
 
         <div class="tk-box">
@@ -1240,7 +1261,7 @@ function render(){
               <div class="tk-step-row">
                 <div class="tk-check ${s.done?'done':''}" data-detail-step="${s.id}"></div>
                 <div style="flex:1;">
-                  <div class="tk-step-text ${s.done?'done':''}">${escapeHtml(s.text)}${s.source==='email'?`<span class="tk-mbx-badge" style="${s.sourceResourceId?'border-color:'+mailboxColor(s.sourceResourceId)+';color:'+mailboxColor(s.sourceResourceId)+';':''}">via email</span>`:''}</div>
+                  <div class="tk-step-text ${s.done?'done':''}">${escapeHtml(s.text)}${s.source==='email'?`<span class="tk-mbx-badge" title="${escapeHtml(state.resources.find(r=>r.id===s.sourceResourceId)?.name||'')}" style="${s.sourceResourceId?'border-color:'+mailboxColor(s.sourceResourceId)+';color:'+mailboxColor(s.sourceResourceId)+';':''}">via email${s.sourceResourceId?' — '+escapeHtml(state.resources.find(r=>r.id===s.sourceResourceId)?.name||''):''}</span>`:''}</div>
                   ${s.done && s.doneBy ? `<div class="tk-step-meta">done by ${escapeHtml(s.doneBy)} · ${fmtTime(s.doneAt)}</div>` : ''}
                   <div class="tk-step-inline">
                     <input class="tk-input" data-assignee-step="${s.id}" placeholder="Assignee" value="${escapeHtml(s.assignee||'')}" />
