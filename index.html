@@ -193,7 +193,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 04:40 UTC';
+const BUILD_VERSION = '2026-07-10 05:03 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -307,7 +307,8 @@ let state = {
   projects: [], updates: [], resources: [], invoices: [], globalKnowledge: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
   tab: 'digest', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
-  justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary', updateInFlight: false
+  justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary', updateInFlight: false,
+  helpStepText: null, helpStepCopied: false
 };
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -1693,6 +1694,22 @@ function render(){
       </div>`;
   }
 
+  let helpStepModal = '';
+  if(state.helpStepText){
+    helpStepModal = `
+      <div class="tk-modal" id="tk-helpstep-overlay">
+        <div class="tk-modal-box wide">
+          <h3>Step context ${state.helpStepCopied ? '<span class="tk-copied" style="margin-left:8px;">Copied to clipboard</span>' : ''}</h3>
+          <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;">${state.helpStepCopied ? 'Already on your clipboard — paste it into a new Claude chat.' : "Couldn't confirm the automatic copy worked (browsers vary) — select all the text below and copy it manually (Ctrl/Cmd+C), then paste into a new Claude chat."}</p>
+          <div class="tk-field"><textarea class="tk-textarea" id="tk-helpstep-text" readonly style="min-height:280px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;">${escapeHtml(state.helpStepText)}</textarea></div>
+          <div class="tk-modal-actions">
+            <button class="tk-btn ghost small" id="tk-helpstep-retry">Copy again</button>
+            <button class="tk-btn small" id="tk-helpstep-close">Close</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
 
   mount.innerHTML = `
     <div class="tk-app">
@@ -1712,6 +1729,7 @@ function render(){
     ${newUserModal}
     ${newResourceModal}
     ${importModal}
+    ${helpStepModal}
   `;
 
   attachHandlers();
@@ -1895,14 +1913,31 @@ function attachHandlers(){
     const p = state.projects.find(p=>p.id===state.openProjectId);
     const s = p.steps.find(x=>x.id===el.dataset.helpStep);
     if(!p || !s) return;
-    const text = buildStepHelpPrompt(p, s);
+    state.helpStepText = buildStepHelpPrompt(p, s);
+    state.helpStepCopied = false;
+    render();
+    // Best-effort automatic copy — the modal shows the text regardless, so
+    // this failing silently (permissions, browser quirks) doesn't matter.
     if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(()=>{
-        state.oauthBanner = {kind:'good', text:'Step context copied — paste it into a new Claude chat to work through it separately.'};
-        render();
+      navigator.clipboard.writeText(state.helpStepText).then(()=>{
+        state.helpStepCopied = true; render();
       }).catch(()=>{});
     }
   }));
+
+  const helpStepTextarea = document.getElementById('tk-helpstep-text');
+  if(helpStepTextarea) helpStepTextarea.addEventListener('click', ()=> helpStepTextarea.select());
+  const helpStepRetry = document.getElementById('tk-helpstep-retry');
+  if(helpStepRetry) helpStepRetry.addEventListener('click', ()=>{
+    if(helpStepTextarea) helpStepTextarea.select();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(state.helpStepText).then(()=>{ state.helpStepCopied = true; render(); }).catch(()=>{});
+    }
+  });
+  const helpStepClose = document.getElementById('tk-helpstep-close');
+  if(helpStepClose) helpStepClose.addEventListener('click', ()=>{ state.helpStepText = null; render(); });
+  const helpStepOverlay = document.getElementById('tk-helpstep-overlay');
+  if(helpStepOverlay) helpStepOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-helpstep-overlay'){ state.helpStepText=null; render(); } });
 
   const npCancel = document.getElementById('tk-np-cancel');
   if(npCancel) npCancel.addEventListener('click', ()=>{ state.showNewProject = false; render(); });
