@@ -187,7 +187,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 03:21 UTC';
+const BUILD_VERSION = '2026-07-10 03:36 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -196,6 +196,8 @@ const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
 // secret, which lives server-side in the Edge Function, needs protecting).
 const GOOGLE_CLIENT_ID = '696960566917-75kc3k9pknnsb1bg7ecj3aerso871k8b.apps.googleusercontent.com';
 const GMAIL_REDIRECT_URI = SUPABASE_URL + '/functions/v1/gmail-oauth-callback';
+const APPLY_UPDATE_URL = SUPABASE_URL + '/functions/v1/apply-update';
+const UPDATE_SECRET = '7zDap7wHovik6rVqHIyQ/s1baq1SIIho';
 function buildGoogleAuthUrl(resourceId){
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -299,7 +301,7 @@ let state = {
   projects: [], updates: [], resources: [], invoices: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
   tab: 'today', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
-  justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary'
+  justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary', updateInFlight: false
 };
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -477,6 +479,29 @@ function startOfDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
 function startOfWeek(d){ const day=(d.getDay()+6)%7; const s=startOfDay(d); s.setDate(s.getDate()-day); return s; }
 function endOfWeek(d){ const s=startOfWeek(d); const e=new Date(s); e.setDate(s.getDate()+6); e.setHours(23,59,59,999); return e; }
 
+async function applyAiUpdate(projectId, text){
+  if(!text || !text.trim()) return;
+  state.updateInFlight = true; render();
+  try{
+    const res = await fetch(APPLY_UPDATE_URL, {
+      method:'POST',
+      headers: {'Content-Type':'application/json', 'x-update-secret': UPDATE_SECRET},
+      body: JSON.stringify({ project_id: projectId, update_text: text.trim(), user: state.currentUser })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      console.error('applyAiUpdate failed', data);
+      state.oauthBanner = {kind:'bad', text:'Update failed: ' + (data.error || res.status)};
+    } else {
+      state.oauthBanner = {kind:'good', text: data.summary ? ('Updated: ' + data.summary) : 'Update applied.'};
+    }
+  }catch(e){
+    console.error('applyAiUpdate exception', e);
+    state.oauthBanner = {kind:'bad', text:'Could not reach the update function: ' + e.message};
+  }
+  state.updateInFlight = false;
+  await loadAll();
+}
 async function addUpdate(projectId, text, type, user){
   if(!text || !text.trim()) return;
   const local = {id:'tmp-'+uid(), projectId, type: type||'manual', text: text.trim(), user: user||state.currentUser, ts: Date.now()};
@@ -924,8 +949,8 @@ function render(){
       <select class="tk-select" id="tk-quicklog-project">
         ${state.projects.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
       </select>
-      <input class="tk-input" id="tk-quicklog-text" placeholder="Log an update, e.g. Registered the domain name for Project XXX today…" />
-      <button class="tk-btn" id="tk-quicklog-btn">Log</button>
+      <input class="tk-input" id="tk-quicklog-text" placeholder="Tell it what you did, e.g. Called Clinpath and got the FetchAPI credentials…" />
+      <button class="tk-btn" id="tk-quicklog-btn">${state.updateInFlight ? 'Updating…' : 'Update'}</button>
     </div>`;
 
   let body = '';
@@ -1408,11 +1433,11 @@ function render(){
               <button class="tk-btn ghost small" id="tk-addstep-btn">Add</button>
             </div>
 
-            <div class="tk-section-label" style="margin-top:24px;">Log an update</div>
+            <div class="tk-section-label" style="margin-top:24px;">Tell it what you did <span style="font-weight:400;">— it figures out what changed</span></div>
             <div class="tk-add-update">
-              <textarea class="tk-textarea" id="tk-detail-update-text" placeholder="Free text update — what happened, what's next…"></textarea>
+              <textarea class="tk-textarea" id="tk-detail-update-text" placeholder="e.g. Called Clinpath and got the FetchAPI credentials, so the polling cron can start"></textarea>
               <div style="display:flex;justify-content:flex-end;">
-                <button class="tk-btn small" id="tk-detail-update-btn">Log update</button>
+                <button class="tk-btn small" id="tk-detail-update-btn">${state.updateInFlight ? 'Updating…' : 'Update'}</button>
               </div>
             </div>
             <div class="tk-note">The Summary tab is the day-to-day view — this Settings tab is for editing structure: renaming, deleting, linking, and per-step detail.</div>
@@ -1574,9 +1599,10 @@ function attachHandlers(){
 
   const qlBtn = document.getElementById('tk-quicklog-btn');
   if(qlBtn) qlBtn.addEventListener('click', ()=>{
+    if(state.updateInFlight) return;
     const projId = document.getElementById('tk-quicklog-project').value;
     const text = document.getElementById('tk-quicklog-text').value;
-    if(text.trim()){ addUpdate(projId, text, 'manual', state.currentUser); render(); }
+    if(text.trim()) applyAiUpdate(projId, text);
   });
   const qlText = document.getElementById('tk-quicklog-text');
   if(qlText) qlText.addEventListener('keydown', e=>{ if(e.key==='Enter'){ document.getElementById('tk-quicklog-btn').click(); } });
@@ -1660,8 +1686,9 @@ function attachHandlers(){
 
   const detailUpdBtn = document.getElementById('tk-detail-update-btn');
   if(detailUpdBtn) detailUpdBtn.addEventListener('click', ()=>{
+    if(state.updateInFlight) return;
     const ta = document.getElementById('tk-detail-update-text');
-    if(ta.value.trim()){ addUpdate(state.openProjectId, ta.value, 'manual', state.currentUser); render(); }
+    if(ta.value.trim()) applyAiUpdate(state.openProjectId, ta.value);
   });
 
   const addParamBtn = document.getElementById('tk-add-param');
