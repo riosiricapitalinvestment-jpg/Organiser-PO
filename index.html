@@ -155,6 +155,10 @@ textarea.tk-textarea{width:100%;font-family:inherit;}
 .tk-triage-pill.active.pending{background:var(--brass);color:var(--paper);border-color:var(--brass);}
 .tk-triage-pill.active.waiting{background:var(--rust);color:var(--paper);border-color:var(--rust);}
 .tk-mbx-activity-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12.5px;}
+.tk-fullplan-box{background:#dde9f2;border:1px solid #a9c6da;border-left:4px solid #4f7d9c;}
+.tk-plan-num{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#3d6a86;flex:0 0 auto;min-width:18px;margin-top:2px;}
+.tk-phase-header{font-family:'Fraunces',serif;font-weight:600;font-size:14.5px;padding:5px 0 5px 10px;margin:18px 0 8px;border-left:4px solid var(--rule);letter-spacing:-0.01em;}
+.tk-phase-header:first-child{margin-top:2px;}
 .tk-mbx-badge{font-family:'IBM Plex Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.03em;color:var(--teal);border:1px solid var(--teal);padding:2px 6px;border-radius:10px;margin-left:6px;}
 .tk-mbx-badge.warn{color:var(--rust);border-color:var(--rust);}
 </style>
@@ -189,7 +193,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 04:21 UTC';
+const BUILD_VERSION = '2026-07-10 04:40 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -321,6 +325,11 @@ function projectColor(id){
 function mailboxColor(id){
   let h = 0;
   for(const c of String(id)) h = (h*37 + c.charCodeAt(0)) >>> 0;
+  return PROJECT_COLORS[h % PROJECT_COLORS.length];
+}
+function phaseColor(id){
+  let h = 0;
+  for(const c of String(id)) h = (h*41 + c.charCodeAt(0)) >>> 0;
   return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
 const STATUS_META = {
@@ -617,6 +626,12 @@ function deleteKnowledge(projectId, knowledgeId, isGeneral){
   render();
   sbDelete('knowledge_entries', 'id=eq.'+knowledgeId).catch(e=> console.error('deleteKnowledge failed', e));
 }
+function updateKnowledge(projectId, knowledgeId, isGeneral, field, value){
+  const list = isGeneral ? state.globalKnowledge : (state.projects.find(p=>p.id===projectId)||{knowledge:[]}).knowledge;
+  const k = (list||[]).find(x=>x.id===knowledgeId); if(!k) return;
+  k[field] = value;
+  sbUpdate('knowledge_entries', 'id=eq.'+knowledgeId, {[field]: value}).catch(e=> console.error('updateKnowledge failed', e));
+}
 async function addStep(projectId, text, assignee, dueDate){
   if(!text || !text.trim()) return;
   const p = state.projects.find(p=>p.id===projectId); if(!p) return;
@@ -839,6 +854,31 @@ async function importProjectJSON(raw){
   render();
 }
 
+function buildStepHelpPrompt(p, s){
+  const phase = p.phases.find(ph=>ph.id===s.phaseId);
+  const lines = [];
+  lines.push('I want focused help on ONE step from my "' + p.name + '" project tracker (a system called Organiser, backed by a live Supabase database). Please help me think through and complete this specific step — the rest of the project doesn\'t need discussing unless it becomes relevant.');
+  lines.push('');
+  lines.push('PROJECT: ' + p.name + ' (status: ' + p.status + ')');
+  if(phase) lines.push('PHASE: ' + phase.name);
+  lines.push('');
+  lines.push('THE STEP: ' + s.text);
+  lines.push('Status: ' + (STATUS_META[s.status] ? STATUS_META[s.status].label : s.status));
+  if(s.instructions) lines.push('Instructions: ' + s.instructions);
+  if(s.statusNote) lines.push('Notes so far: ' + s.statusNote);
+  if(s.blockedByNote) lines.push('Blocked by: ' + s.blockedByNote);
+  if(s.dueDate) lines.push('Due: ' + s.dueDate);
+  if(s.assignee) lines.push('Assigned to: ' + s.assignee);
+  lines.push('');
+  const relevantKnowledge = (p.knowledge||[]).concat(state.globalKnowledge||[]);
+  if(relevantKnowledge.length){
+    lines.push('RELEVANT KNOWLEDGE BASE:');
+    relevantKnowledge.forEach(k=> lines.push('- ' + k.title + ': ' + k.content));
+    lines.push('');
+  }
+  lines.push('When we land on an outcome, please update the live tracker if you have computer/bash tool access: POST to ' + APPLY_UPDATE_URL + ' with header "x-update-secret: ' + UPDATE_SECRET + '" and JSON body {"project_id":"' + p.id + '","update_text":"<what happened>","user":"<my name>"}. If you don\'t have that kind of access in this conversation, just tell me what to type back into the dashboard\'s "Tell it what you did" box myself.');
+  return lines.join('\n');
+}
 function generateBrief(project){
   const p = project;
   const lines = [];
@@ -905,10 +945,10 @@ function groupStepsByPhase(steps, phases){
   const groups = [];
   phases.slice().sort((a,b)=>a.orderIndex-b.orderIndex).forEach(ph=>{
     const items = steps.filter(s=>s.phaseId===ph.id);
-    if(items.length) groups.push({label: ph.name, items});
+    if(items.length) groups.push({label: ph.name, id: ph.id, items});
   });
   const noPhase = steps.filter(s=> !s.phaseId || !phases.some(ph=>ph.id===s.phaseId));
-  if(noPhase.length) groups.push({label: phases.length ? 'No phase' : null, items: noPhase});
+  if(noPhase.length) groups.push({label: phases.length ? 'No phase' : null, id: null, items: noPhase});
   return groups;
 }
 
@@ -1321,7 +1361,11 @@ function render(){
         return `<div class="tk-step-meta" style="color:var(--rust);">${escapeHtml(parts.join(' — '))}</div>`;
       };
       const emailGroups = groupStepsByPhase(emailSteps, p.phases);
+      let triageCounter = 0;
+      emailGroups.forEach(g=>{ g.items = g.items.map(s=>({...s, _num: ++triageCounter})); });
       const manualGroups = groupStepsByPhase(manualSteps, p.phases);
+      let planCounter = 0;
+      manualGroups.forEach(g=>{ g.items = g.items.map(s=>({...s, _num: ++planCounter})); });
 
       const triageControls = (s)=> `
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">
@@ -1345,13 +1389,20 @@ function render(){
           ${(p.knowledge.length || state.globalKnowledge.length) ? `
             ${p.knowledge.map(k=>`
               <div class="tk-res-row">
-                <div><div class="tk-res-name">${escapeHtml(k.title)}</div><div class="tk-res-detail">${escapeHtml(k.content)}</div></div>
+                <div style="flex:1;">
+                  <input class="tk-input" style="font-weight:600;margin-bottom:4px;width:100%;" data-kn-title="${k.id}" data-kn-general="0" value="${escapeHtml(k.title)}" />
+                  <input class="tk-input" style="width:100%;" data-kn-content="${k.id}" data-kn-general="0" value="${escapeHtml(k.content)}" />
+                </div>
                 <span class="rm" data-del-knowledge="${k.id}" data-knowledge-general="0">&times;</span>
               </div>
             `).join('')}
             ${state.globalKnowledge.map(k=>`
               <div class="tk-res-row">
-                <div><div class="tk-res-name">${escapeHtml(k.title)} <span class="tk-mbx-badge">general</span></div><div class="tk-res-detail">${escapeHtml(k.content)}</div></div>
+                <div style="flex:1;">
+                  <div style="margin-bottom:4px;"><span class="tk-mbx-badge">general</span></div>
+                  <input class="tk-input" style="font-weight:600;margin-bottom:4px;width:100%;" data-kn-title="${k.id}" data-kn-general="1" value="${escapeHtml(k.title)}" />
+                  <input class="tk-input" style="width:100%;" data-kn-content="${k.id}" data-kn-general="1" value="${escapeHtml(k.content)}" />
+                </div>
                 <span class="rm" data-del-knowledge="${k.id}" data-knowledge-general="1">&times;</span>
               </div>
             `).join('')}
@@ -1377,11 +1428,12 @@ function render(){
         <div class="tk-box">
           <div class="tk-box-title">Needs triage (from email) <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
           ${emailGroups.length ? emailGroups.map(g=>`
-            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
+            ${g.label ? `<div class="tk-phase-header" style="${g.id?'border-left-color:'+phaseColor(g.id)+';color:'+phaseColor(g.id)+';':''}">${escapeHtml(g.label)}</div>` : ''}
             ${g.items.map(s=>{
               const srcResource = s.sourceResourceId ? state.resources.find(r=>r.id===s.sourceResourceId) : null;
               return `
               <div class="tk-triage-row">
+                <span class="tk-plan-num">${s._num}</span>
                 ${s.sourceResourceId?`<span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;margin-top:3px;background:${mailboxColor(s.sourceResourceId)};border-radius:2px;"></span>`:''}
                 <div style="flex:1;">
                   <div style="font-size:13px;">${escapeHtml(s.text)}${statusBadge(s)}</div>
@@ -1395,17 +1447,20 @@ function render(){
           `).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
         </div>
 
-        <div class="tk-box">
+        <div class="tk-box tk-fullplan-box">
           <div class="tk-box-title">Full plan <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${manualSteps.filter(s=>!s.done).length} open of ${manualSteps.length}</span></div>
           ${manualGroups.length ? manualGroups.map(g=>`
-            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
+            ${g.label ? `<div class="tk-phase-header" style="${g.id?'border-left-color:'+phaseColor(g.id)+';color:'+phaseColor(g.id)+';':''}">${escapeHtml(g.label)}</div>` : ''}
             ${g.items.map(s=>`
-              <div class="tk-action-row">
+              <div class="tk-action-row" style="${s.done?'opacity:0.55;':''}">
+                <span class="tk-plan-num">${s._num}</span>
                 <div class="tk-check ${s.done?'done':''}" data-proj="${p.id}" data-step="${s.id}"></div>
                 <div>
-                  <div class="tk-action-text" style="${s.done?'color:var(--muted);':''}">${escapeHtml(s.text)}${statusBadge(s)}${s.assignee?`<span class="tk-action-assignee">${escapeHtml(s.assignee)}</span>`:''}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}${s.source==='email'?`<span class="tk-mbx-badge" style="${s.sourceResourceId?'border-color:'+mailboxColor(s.sourceResourceId)+';color:'+mailboxColor(s.sourceResourceId)+';':''}">email</span>`:''}</div>
-                  ${s.statusNote?`<div class="tk-step-meta">${escapeHtml(s.statusNote).replace(/\n/g,'<br>')}</div>`:''}
-                  ${blockedHint(s)}
+                  <div class="tk-action-text" style="${s.done?'color:var(--muted);text-decoration:line-through;':''}">${escapeHtml(s.text)}${statusBadge(s)}${s.assignee?`<span class="tk-action-assignee">${escapeHtml(s.assignee)}</span>`:''}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}${s.source==='email'?`<span class="tk-mbx-badge" style="${s.sourceResourceId?'border-color:'+mailboxColor(s.sourceResourceId)+';color:'+mailboxColor(s.sourceResourceId)+';':''}">email</span>`:''}</div>
+                  ${!s.done && s.statusNote?`<div class="tk-step-meta">${escapeHtml(s.statusNote).replace(/\n/g,'<br>')}</div>`:''}
+                  ${s.done && s.doneBy?`<div class="tk-step-meta">done by ${escapeHtml(s.doneBy)}${s.doneAt?' · '+fmtDate(s.doneAt):''}</div>`:''}
+                  ${!s.done ? blockedHint(s) : ''}
+                  ${!s.done ? `<button class="tk-btn ghost small" data-help-step="${s.id}" style="margin-top:5px;">Help me with this</button>` : ''}
                 </div>
               </div>
             `).join('')}
@@ -1822,6 +1877,8 @@ function attachHandlers(){
     );
   });
   document.querySelectorAll('[data-del-knowledge]').forEach(el=> el.addEventListener('click', ()=> deleteKnowledge(state.openProjectId, el.dataset.delKnowledge, el.dataset.knowledgeGeneral==='1')));
+  document.querySelectorAll('[data-kn-title]').forEach(el=> el.addEventListener('change', e=> updateKnowledge(state.openProjectId, el.dataset.knTitle, el.dataset.knGeneral==='1', 'title', e.target.value)));
+  document.querySelectorAll('[data-kn-content]').forEach(el=> el.addEventListener('change', e=> updateKnowledge(state.openProjectId, el.dataset.knContent, el.dataset.knGeneral==='1', 'content', e.target.value)));
 
   document.querySelectorAll('[data-unlink]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.unlink)));
   document.querySelectorAll('[data-link]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.link)));
@@ -1833,6 +1890,19 @@ function attachHandlers(){
     const p = state.projects.find(p=>p.id===state.openProjectId);
     copyBrief(generateBrief(p));
   });
+
+  document.querySelectorAll('[data-help-step]').forEach(el=> el.addEventListener('click', ()=>{
+    const p = state.projects.find(p=>p.id===state.openProjectId);
+    const s = p.steps.find(x=>x.id===el.dataset.helpStep);
+    if(!p || !s) return;
+    const text = buildStepHelpPrompt(p, s);
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(()=>{
+        state.oauthBanner = {kind:'good', text:'Step context copied — paste it into a new Claude chat to work through it separately.'};
+        render();
+      }).catch(()=>{});
+    }
+  }));
 
   const npCancel = document.getElementById('tk-np-cancel');
   if(npCancel) npCancel.addEventListener('click', ()=>{ state.showNewProject = false; render(); });
