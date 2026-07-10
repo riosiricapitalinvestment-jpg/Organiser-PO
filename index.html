@@ -141,6 +141,18 @@ textarea.tk-textarea{width:100%;font-family:inherit;}
 .tk-cal-group{margin-bottom:26px;}
 .tk-cal-group.overdue .tk-section-label{color:var(--rust);}
 .tk-cal-filter{display:flex;gap:8px;align-items:center;margin-bottom:20px;}
+.tk-panel-tabs{display:flex;gap:2px;margin:14px 0 18px;border-bottom:1px solid var(--rule-soft);}
+.tk-panel-tab{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;padding:8px 4px;margin-right:20px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;user-select:none;}
+.tk-panel-tab.active{color:var(--ink);border-bottom-color:var(--brass);}
+.tk-box{border:1px solid var(--rule);padding:12px 14px;margin-bottom:16px;background:var(--paper-raised);}
+.tk-box-title{font-family:'Fraunces',serif;font-weight:600;font-size:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.tk-triage-row{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--rule-soft);}
+.tk-triage-row:last-child{border-bottom:none;}
+.tk-triage-pill{font-family:'IBM Plex Mono',monospace;font-size:9.5px;text-transform:uppercase;padding:2px 7px;border-radius:10px;cursor:pointer;border:1px solid var(--rule);color:var(--muted);margin-right:4px;}
+.tk-triage-pill.active.new{background:var(--muted-2);color:var(--paper);border-color:var(--muted-2);}
+.tk-triage-pill.active.pending{background:var(--brass);color:var(--paper);border-color:var(--brass);}
+.tk-triage-pill.active.waiting{background:var(--rust);color:var(--paper);border-color:var(--rust);}
+.tk-mbx-activity-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12.5px;}
 .tk-mbx-badge{font-family:'IBM Plex Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.03em;color:var(--teal);border:1px solid var(--teal);padding:2px 6px;border-radius:10px;margin-left:6px;}
 .tk-mbx-badge.warn{color:var(--rust);border-color:var(--rust);}
 </style>
@@ -175,7 +187,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 01:59 UTC';
+const BUILD_VERSION = '2026-07-10 02:12 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -287,7 +299,7 @@ let state = {
   projects: [], updates: [], resources: [], invoices: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
   tab: 'today', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
-  justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false
+  justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary'
 };
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -405,7 +417,7 @@ async function loadAll(){
       const steps = (tasksRows||[]).filter(x=>x.project_id===p.id).map(x=>({
         id:x.id, text:x.text, done:x.done, doneBy:x.done_by, doneAt: x.done_at ? new Date(x.done_at).getTime() : null,
         assignee:x.assignee||'', dueDate:x.due_date||'', instructions:x.instructions||'', statusNote:x.status_note||'', contextTag:x.context_tag||'',
-        source:x.source||'manual', sourceResourceId:x.source_resource_id||null
+        source:x.source||'manual', sourceResourceId:x.source_resource_id||null, triageStatus:x.triage_status||'new'
       }));
       return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps};
     });
@@ -500,6 +512,16 @@ async function addStep(projectId, text, assignee, dueDate){
     local.id = row.id;
   }catch(e){ console.error('addStep failed', e); }
 }
+function updateTaskTriageStatus(projectId, stepId, status, waitUntil){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const s = p.steps.find(x=>x.id===stepId); if(!s) return;
+  s.triageStatus = status;
+  const patch = { triage_status: status };
+  if(status==='waiting' && waitUntil){ s.dueDate = waitUntil; patch.due_date = waitUntil; }
+  render();
+  sbUpdate('tasks', 'id=eq.'+stepId, patch).catch(e=> console.error('updateTaskTriageStatus failed', e));
+}
+
 function updateStepField(projectId, stepId, field, value){
   const p = state.projects.find(p=>p.id===projectId); if(!p) return;
   const s = p.steps.find(x=>x.id===stepId); if(!s) return;
@@ -1098,16 +1120,80 @@ function render(){
       const projUpdates = state.updates.filter(u=>u.projectId===p.id);
       const otherProjects = state.projects.filter(x=>x.id!==p.id);
       const brief = generateBrief(p);
-      overlay = `
-        <div class="tk-overlay" id="tk-panel-overlay">
-          <div class="tk-panel" id="tk-panel-inner">
-            <div class="tk-panel-head">
-              <div class="tk-panel-title">
-                <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${projectColor(p.id)};margin-right:9px;vertical-align:middle;flex:0 0 11px;"></span>
-                <input class="tk-panel-title-input" data-rename-project="${p.id}" value="${escapeHtml(p.name)}" />
+      const emailSteps = p.steps.filter(s=>s.source==='email' && !s.done);
+      const manualSteps = p.steps.filter(s=>s.source!=='email' && !s.done);
+      const linkedMailboxes = p.resourceIds.map(rid=>state.resources.find(r=>r.id===rid)).filter(r=>r && r.type==='mailbox');
+      const deadlines = p.steps.filter(s=>!s.done && s.dueDate).sort((a,b)=> new Date(a.dueDate)-new Date(b.dueDate)).slice(0,3);
+
+      const triageControls = (s)=> `
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">
+          <span class="tk-triage-pill ${s.triageStatus==='new'?'active new':''}" data-triage="${s.id}" data-triage-val="new">New</span>
+          <span class="tk-triage-pill ${s.triageStatus==='pending'?'active pending':''}" data-triage="${s.id}" data-triage-val="pending">Pending</span>
+          <span class="tk-triage-pill ${s.triageStatus==='waiting'?'active waiting':''}" data-triage="${s.id}" data-triage-val="waiting">Waiting</span>
+          ${s.triageStatus==='waiting' ? `<input class="tk-date" type="date" style="width:126px;" data-triage-wait="${s.id}" value="${escapeHtml(s.dueDate||'')}" />` : ''}
+          <button class="tk-btn ghost small" data-detail-step="${s.id}" style="margin-left:auto;">Mark done</button>
+        </div>`;
+
+      const summaryContent = `
+        <div class="tk-box" style="border-left:4px solid ${projectColor(p.id)};">
+          <div class="tk-box-title">Overview</div>
+          <div style="font-size:12.5px;margin-bottom:8px;"><span class="tk-user-label">status</span> ${escapeHtml(p.status)}</div>
+          ${p.params.length ? p.params.filter(pr=>pr.key).map(pr=>`<div style="font-size:12.5px;color:var(--muted);">${escapeHtml(pr.key)}: ${escapeHtml(pr.value)}</div>`).join('') : ''}
+          ${deadlines.length ? `<div style="margin-top:10px;"><span class="tk-user-label">upcoming deadlines</span>${deadlines.map(d=>`<div style="font-size:12.5px;margin-top:3px;">${escapeHtml(d.text)} — <span class="tk-action-due">due ${fmtDueDate(d.dueDate)}</span></div>`).join('')}</div>` : ''}
+        </div>
+
+        <div class="tk-box">
+          <div class="tk-box-title">Emails <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
+          ${emailSteps.length ? emailSteps.map(s=>`
+            <div class="tk-triage-row">
+              ${s.sourceResourceId?`<span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;margin-top:3px;background:${mailboxColor(s.sourceResourceId)};border-radius:2px;"></span>`:''}
+              <div style="flex:1;">
+                <div style="font-size:13px;">${escapeHtml(s.text)}</div>
+                ${s.instructions?`<div class="tk-step-meta">${escapeHtml(s.instructions)}</div>`:''}
+                ${triageControls(s)}
               </div>
-              <button class="tk-close" id="tk-panel-close">&times;</button>
             </div>
+          `).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
+        </div>
+
+        <div class="tk-box">
+          <div class="tk-box-title">Tasks <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${manualSteps.length}</span></div>
+          ${manualSteps.length ? manualSteps.map(s=>`
+            <div class="tk-action-row">
+              <div class="tk-check" data-proj="${p.id}" data-step="${s.id}"></div>
+              <div>
+                <div class="tk-action-text">${escapeHtml(s.text)}${s.assignee?`<span class="tk-action-assignee">${escapeHtml(s.assignee)}</span>`:''}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}</div>
+                ${s.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(s.statusNote)}</div>`:''}
+              </div>
+            </div>
+          `).join('') : `<div class="tk-empty">No open tasks.</div>`}
+        </div>
+
+        ${linkedMailboxes.length ? `
+        <div class="tk-box">
+          <div class="tk-box-title">Mailbox activity</div>
+          ${linkedMailboxes.map(r=>`
+            <div class="tk-mbx-activity-row">
+              <span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;background:${mailboxColor(r.id)};border-radius:2px;"></span>
+              <span style="flex:1;">${escapeHtml(r.name)}</span>
+              <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;">${escapeHtml(fmtAgo(r.lastChecked))}</span>
+            </div>
+          `).join('')}
+        </div>` : ''}
+
+        <div class="tk-box">
+          <div class="tk-box-title">Ledger</div>
+          ${projUpdates.length ? projUpdates.slice(0,15).map(u=>renderLedgerEntry(u,false)).join('') : `<div class="tk-empty">No entries yet.</div>`}
+        </div>
+
+        <div class="tk-box">
+          <div class="tk-box-title">AI context brief <span style="font-weight:400;font-family:'Inter',sans-serif;font-size:11px;">paste into any Claude chat</span></div>
+          <div class="tk-brief-box">${escapeHtml(brief)}</div>
+          <div style="margin-top:8px;"><button class="tk-btn ghost small" id="tk-copy-brief">Copy brief</button>${state.justCopied ? '<span class="tk-copied">Copied</span>' : ''}</div>
+        </div>
+      `;
+
+      const settingsContent = `
             <div class="tk-status-row">
               <span class="tk-user-label">status</span>
               <select class="tk-select" id="tk-status-select">
@@ -1149,7 +1235,7 @@ function render(){
               ${state.resources.filter(r=>!p.resourceIds.includes(r.id)).map(r=>`<span class="tk-chip-choice" data-resource="${r.id}">+ ${escapeHtml(r.name)}</span>`).join('')}
             </div>
 
-            <div class="tk-section-label" style="margin-top:20px;">Steps</div>
+            <div class="tk-section-label" style="margin-top:20px;">Steps <span style="font-weight:400;">(full detail — instructions, status notes, handoff tags)</span></div>
             ${p.steps.map(s=>`
               <div class="tk-step-row">
                 <div class="tk-check ${s.done?'done':''}" data-detail-step="${s.id}"></div>
@@ -1186,15 +1272,24 @@ function render(){
                 <button class="tk-btn small" id="tk-detail-update-btn">Log update</button>
               </div>
             </div>
+            <div class="tk-note">The Summary tab is the day-to-day view — this Settings tab is for editing structure: renaming, deleting, linking, and per-step detail.</div>
+      `;
 
-            <div class="tk-section-label">Ledger</div>
-            ${projUpdates.length ? projUpdates.map(u=>renderLedgerEntry(u,false)).join('') : `<div class="tk-empty">No entries yet.</div>`}
-
-            <div class="tk-section-label" style="margin-top:24px;">AI context brief <span style="font-weight:400;">— paste into any Claude chat</span></div>
-            <div class="tk-brief-box">${escapeHtml(brief)}</div>
-            <div style="margin-top:8px;"><button class="tk-btn ghost small" id="tk-copy-brief">Copy brief</button>${state.justCopied ? '<span class="tk-copied">Copied</span>' : ''}</div>
-
-            <div class="tk-note">This brief always reflects live state — status, parameters, linked projects/resources, steps (with assignee and due date), and recent progress. Copy it into a new chat so Claude has full context without you re-explaining.</div>
+      overlay = `
+        <div class="tk-overlay" id="tk-panel-overlay">
+          <div class="tk-panel" id="tk-panel-inner">
+            <div class="tk-panel-head">
+              <div class="tk-panel-title">
+                <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${projectColor(p.id)};margin-right:9px;vertical-align:middle;flex:0 0 11px;"></span>
+                <input class="tk-panel-title-input" data-rename-project="${p.id}" value="${escapeHtml(p.name)}" />
+              </div>
+              <button class="tk-close" id="tk-panel-close">&times;</button>
+            </div>
+            <div class="tk-panel-tabs">
+              <div class="tk-panel-tab ${state.projectPanelTab==='summary'?'active':''}" data-panel-tab="summary">Summary</div>
+              <div class="tk-panel-tab ${state.projectPanelTab==='settings'?'active':''}" data-panel-tab="settings">Settings</div>
+            </div>
+            ${state.projectPanelTab==='summary' ? summaryContent : settingsContent}
           </div>
         </div>`;
     }
@@ -1352,7 +1447,7 @@ function attachHandlers(){
   });
 
   document.querySelectorAll('[data-open]').forEach(el=>{
-    el.addEventListener('click', (e)=>{ e.stopPropagation(); state.confirmDeleteProject = false; state.openProjectId = el.dataset.open; render(); });
+    el.addEventListener('click', (e)=>{ e.stopPropagation(); state.confirmDeleteProject = false; state.projectPanelTab = 'summary'; state.openProjectId = el.dataset.open; render(); });
   });
 
   const newProjBtn = document.getElementById('tk-new-project');
@@ -1369,6 +1464,24 @@ function attachHandlers(){
   if(panelClose) panelClose.addEventListener('click', ()=>{ state.openProjectId = null; state.confirmDeleteProject = false; render(); });
   const panelOverlay = document.getElementById('tk-panel-overlay');
   if(panelOverlay) panelOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-panel-overlay'){ state.openProjectId = null; state.confirmDeleteProject = false; render(); } });
+
+  document.querySelectorAll('[data-panel-tab]').forEach(el=> el.addEventListener('click', ()=>{ state.projectPanelTab = el.dataset.panelTab; render(); }));
+
+  document.querySelectorAll('[data-triage]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const val = el.dataset.triageVal;
+      if(val==='waiting'){
+        const p = state.projects.find(p=>p.id===state.openProjectId);
+        const s = p.steps.find(x=>x.id===el.dataset.triage);
+        updateTaskTriageStatus(state.openProjectId, el.dataset.triage, 'waiting', s.dueDate || new Date().toISOString().slice(0,10));
+      } else {
+        updateTaskTriageStatus(state.openProjectId, el.dataset.triage, val);
+      }
+    });
+  });
+  document.querySelectorAll('[data-triage-wait]').forEach(el=>{
+    el.addEventListener('change', e=> updateTaskTriageStatus(state.openProjectId, el.dataset.triageWait, 'waiting', e.target.value));
+  });
 
   const statusSel = document.getElementById('tk-status-select');
   if(statusSel) statusSel.addEventListener('change', e=>{ setProjectStatus(state.openProjectId, e.target.value); });
