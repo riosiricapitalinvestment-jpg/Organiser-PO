@@ -187,7 +187,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 02:34 UTC';
+const BUILD_VERSION = '2026-07-10 03:21 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -319,6 +319,15 @@ function mailboxColor(id){
   for(const c of String(id)) h = (h*37 + c.charCodeAt(0)) >>> 0;
   return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
+const STATUS_META = {
+  todo:        {label:'Todo',        color:'var(--muted-2)'},
+  in_progress: {label:'In progress', color:'var(--brass)'},
+  waiting:     {label:'Waiting',     color:'var(--rust)'},
+  email_sent:  {label:'Email sent',  color:'var(--teal)'},
+  done:        {label:'Done',        color:'#3d7a4f'},
+  future:      {label:'Future',      color:'var(--muted)'},
+  confirm:     {label:'Confirm',     color:'#6b4fa0'}
+};
 
 async function seedIfEmpty(){
   const existing = await sbSelect('projects', 'select=id&limit=1');
@@ -380,14 +389,21 @@ async function loadAll(){
       sbSelect('users', 'select=*&order=created_at.asc')
     ]);
 
-    // Loaded separately: the invoices table only exists after the finance
-    // migration has been run, so a missing table here shouldn't take down
-    // everything else — just show an empty Finance tab until it's applied.
+    // Loaded separately: these tables/columns only exist after their
+    // respective migrations have run, so a missing one here shouldn't take
+    // down everything else — just degrade gracefully until applied.
     try{
       state.invoices = await sbSelect('invoices', 'select=*&order=due_date.asc.nullslast');
     }catch(e){
       console.error('invoices table not available yet', e);
       state.invoices = [];
+    }
+    let phasesRows = [];
+    try{
+      phasesRows = await sbSelect('phases', 'select=*&order=order_index.asc');
+    }catch(e){
+      console.error('phases table not available yet', e);
+      phasesRows = [];
     }
 
     const mbxByResource = {};
@@ -414,13 +430,17 @@ async function loadAll(){
       const params = (paramsRows||[]).filter(x=>x.project_id===p.id).map(x=>({id:x.id, key:x.key||'', value:x.value||''}));
       const links = (linksRows||[]).filter(x=>x.project_id===p.id).map(x=>x.linked_project_id);
       const resourceIds = (prRows||[]).filter(x=>x.project_id===p.id).map(x=>x.resource_id);
+      const phases = phasesRows.filter(x=>x.project_id===p.id).map(x=>({id:x.id, name:x.name, orderIndex:x.order_index||0}));
       const steps = (tasksRows||[]).filter(x=>x.project_id===p.id).map(x=>({
         id:x.id, text:x.text, done:x.done, doneBy:x.done_by, doneAt: x.done_at ? new Date(x.done_at).getTime() : null,
         assignee:x.assignee||'', dueDate:x.due_date||'', instructions:x.instructions||'', statusNote:x.status_note||'', contextTag:x.context_tag||'',
         source:x.source||'manual', sourceResourceId:x.source_resource_id||null, triageStatus:x.triage_status||'new',
-        createdAt: x.created_at ? new Date(x.created_at).getTime() : null
+        createdAt: x.created_at ? new Date(x.created_at).getTime() : null,
+        status: x.status || (x.done ? 'done' : 'todo'), phaseId: x.phase_id||null,
+        blockedByTaskId: x.blocked_by_task_id||null, blockedByNote: x.blocked_by_note||'',
+        canProceed: x.can_proceed!==undefined ? x.can_proceed : true, followUpDate: x.follow_up_date||''
       }));
-      return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps};
+      return {id:p.id, name:p.name, status:p.status, createdAt: new Date(p.created_at).getTime(), params, links, resourceIds, steps, phases};
     });
 
     state.loadError = null;
@@ -496,17 +516,58 @@ async function markStep(projectId, stepId, done){
   const p = state.projects.find(p=>p.id===projectId); if(!p) return;
   const s = p.steps.find(s=>s.id===stepId); if(!s) return;
   s.done = done;
-  const patch = { done };
+  s.status = done ? 'done' : 'todo';
+  const patch = { done, status: s.status };
   if(done){ s.doneBy = state.currentUser; s.doneAt = Date.now(); patch.done_by = state.currentUser; patch.done_at = new Date(s.doneAt).toISOString(); }
   else { s.doneBy = null; s.doneAt = null; patch.done_by = null; patch.done_at = null; }
   render();
   addUpdate(projectId, (done?'Marked done: ':'Reopened: ')+s.text, 'manual', state.currentUser);
   try{ await sbUpdate('tasks', 'id=eq.'+stepId, patch); }catch(e){ console.error('markStep failed', e); }
 }
+function updateTaskStatus(projectId, stepId, status){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const s = p.steps.find(x=>x.id===stepId); if(!s) return;
+  s.status = status;
+  const patch = { status };
+  if(status==='done'){ s.done = true; s.doneBy = state.currentUser; s.doneAt = Date.now(); patch.done = true; patch.done_by = state.currentUser; patch.done_at = new Date(s.doneAt).toISOString(); }
+  else { s.done = false; s.doneBy = null; s.doneAt = null; patch.done = false; patch.done_by = null; patch.done_at = null; }
+  render();
+  sbUpdate('tasks', 'id=eq.'+stepId, patch).catch(e=> console.error('updateTaskStatus failed', e));
+}
+function updateTaskField2(projectId, stepId, field, col, value){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const s = p.steps.find(x=>x.id===stepId); if(!s) return;
+  s[field] = value;
+  sbUpdate('tasks', 'id=eq.'+stepId, {[col]: value===''?null:value}).catch(e=> console.error('updateTaskField2 failed', e));
+}
+async function addPhase(projectId, name){
+  if(!name || !name.trim()) return;
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const local = {id:'tmp-'+uid(), name:name.trim(), orderIndex:p.phases.length};
+  p.phases.push(local); render();
+  try{
+    const [row] = await sbInsert('phases', [{project_id:projectId, name:local.name, order_index:local.orderIndex}]);
+    local.id = row.id;
+  }catch(e){ console.error('addPhase failed', e); }
+}
+function renamePhase(projectId, phaseId, name){
+  if(!name || !name.trim()) return;
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  const ph = p.phases.find(x=>x.id===phaseId); if(!ph) return;
+  ph.name = name.trim(); render();
+  sbUpdate('phases', 'id=eq.'+phaseId, {name: ph.name}).catch(e=> console.error('renamePhase failed', e));
+}
+function deletePhase(projectId, phaseId){
+  const p = state.projects.find(p=>p.id===projectId); if(!p) return;
+  p.phases = p.phases.filter(x=>x.id!==phaseId);
+  p.steps.forEach(s=>{ if(s.phaseId===phaseId) s.phaseId=null; });
+  render();
+  sbDelete('phases', 'id=eq.'+phaseId).catch(e=> console.error('deletePhase failed', e));
+}
 async function addStep(projectId, text, assignee, dueDate){
   if(!text || !text.trim()) return;
   const p = state.projects.find(p=>p.id===projectId); if(!p) return;
-  const local = {id:'tmp-'+uid(), text:text.trim(), done:false, assignee:(assignee||'').trim(), dueDate:dueDate||'', instructions:'', statusNote:'', contextTag:''};
+  const local = {id:'tmp-'+uid(), text:text.trim(), done:false, assignee:(assignee||'').trim(), dueDate:dueDate||'', instructions:'', statusNote:'', contextTag:'', status:'todo', phaseId:null, blockedByTaskId:null, blockedByNote:'', canProceed:true, followUpDate:'', source:'manual', sourceResourceId:null, triageStatus:'new', createdAt:Date.now()};
   p.steps.push(local); render();
   try{
     const [row] = await sbInsert('tasks', [{project_id:projectId, text:local.text, assignee: local.assignee||null, due_date: local.dueDate||null}]);
@@ -586,7 +647,7 @@ async function createProject(name, stepLines, status, linkIds, resIds){
     const steps = [];
     if(stepTexts.length){
       const inserted = await sbInsert('tasks', stepTexts.map(t=>({project_id:id, text:t})));
-      inserted.forEach(t=> steps.push({id:t.id, text:t.text, done:false, assignee:'', dueDate:'', instructions:'', statusNote:'', contextTag:''}));
+      inserted.forEach(t=> steps.push({id:t.id, text:t.text, done:false, assignee:'', dueDate:'', instructions:'', statusNote:'', contextTag:'', status:'todo', phaseId:null, blockedByTaskId:null, blockedByNote:'', canProceed:true, followUpDate:'', source:'manual', sourceResourceId:null, triageStatus:'new', createdAt:Date.now()}));
     }
     if(linkIds && linkIds.length){
       const rows = [];
@@ -597,7 +658,7 @@ async function createProject(name, stepLines, status, linkIds, resIds){
     if(resIds && resIds.length){
       await sbInsert('project_resources', resIds.map(rid=>({project_id:id, resource_id:rid})));
     }
-    state.projects.push({id, name:name.trim(), status: status||'active', createdAt: Date.now(), steps, params:[], links: linkIds||[], resourceIds: resIds||[]});
+    state.projects.push({id, name:name.trim(), status: status||'active', createdAt: Date.now(), steps, params:[], links: linkIds||[], resourceIds: resIds||[], phases:[]});
     addUpdate(id, 'Project created'+((linkIds&&linkIds.length)||(resIds&&resIds.length) ? ', linked to existing projects/resources so shared context carries over.' : '.'), 'manual', state.currentUser);
     state.openProjectId = id;
   }catch(e){ console.error('createProject failed', e); }
@@ -698,7 +759,7 @@ async function importProjectJSON(raw){
           instructions: s.instructions||null, status_note: s.statusNote||null, context_tag: s.contextTag||null
         }));
         const inserted = await sbInsert('tasks', taskRows);
-        steps = inserted.map(t=>({id:t.id, text:t.text, done:t.done, doneBy:t.done_by, doneAt: t.done_at? new Date(t.done_at).getTime():null, assignee:t.assignee||'', dueDate:t.due_date||'', instructions:t.instructions||'', statusNote:t.status_note||'', contextTag:t.context_tag||''}));
+        steps = inserted.map(t=>({id:t.id, text:t.text, done:t.done, doneBy:t.done_by, doneAt: t.done_at? new Date(t.done_at).getTime():null, assignee:t.assignee||'', dueDate:t.due_date||'', instructions:t.instructions||'', statusNote:t.status_note||'', contextTag:t.context_tag||'', status: t.status || (t.done?'done':'todo'), phaseId:null, blockedByTaskId:null, blockedByNote:'', canProceed:true, followUpDate:'', source:t.source||'manual', sourceResourceId:t.source_resource_id||null, triageStatus:'new', createdAt:Date.now()}));
       }
       const links = (item.links||[]).map(n=> nameToId[String(n).toLowerCase()]).filter(Boolean);
       if(links.length){
@@ -713,7 +774,7 @@ async function importProjectJSON(raw){
         const inserted = await sbInsert('project_params', item.params.map(pr=>({project_id:id, key:pr.key||'', value:pr.value||''})));
         params = inserted.map(p=>({id:p.id, key:p.key||'', value:p.value||''}));
       }
-      state.projects.push({id, name:item.name, status:item.status||'active', createdAt:Date.now(), steps, params, links, resourceIds});
+      state.projects.push({id, name:item.name, status:item.status||'active', createdAt:Date.now(), steps, params, links, resourceIds, phases:[]});
       nameToId[item.name.toLowerCase()] = id;
       addUpdate(id, 'Project imported.', 'manual', state.currentUser);
     }catch(e){
@@ -779,6 +840,17 @@ function allAssignees(){
   state.users.forEach(u=> set.add(u));
   state.projects.forEach(p=> p.steps.forEach(s=>{ if(s.assignee) set.add(s.assignee); }));
   return Array.from(set).sort();
+}
+
+function groupStepsByPhase(steps, phases){
+  const groups = [];
+  phases.slice().sort((a,b)=>a.orderIndex-b.orderIndex).forEach(ph=>{
+    const items = steps.filter(s=>s.phaseId===ph.id);
+    if(items.length) groups.push({label: ph.name, items});
+  });
+  const noPhase = steps.filter(s=> !s.phaseId || !phases.some(ph=>ph.id===s.phaseId));
+  if(noPhase.length) groups.push({label: phases.length ? 'No phase' : null, items: noPhase});
+  return groups;
 }
 
 function render(){
@@ -1143,6 +1215,18 @@ function render(){
       const linkedMailboxes = p.resourceIds.map(rid=>state.resources.find(r=>r.id===rid)).filter(r=>r && r.type==='mailbox');
       const deadlines = p.steps.filter(s=>!s.done && s.dueDate).sort((a,b)=> new Date(a.dueDate)-new Date(b.dueDate)).slice(0,3);
 
+      const statusBadge = (s)=> `<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;text-transform:uppercase;padding:1px 6px;border-radius:8px;border:1px solid ${STATUS_META[s.status]?.color||'var(--rule)'};color:${STATUS_META[s.status]?.color||'var(--muted)'};margin-left:6px;">${STATUS_META[s.status]?.label||s.status}</span>`;
+      const blockedHint = (s)=>{
+        if(!s.blockedByTaskId && !s.blockedByNote) return '';
+        const blocker = s.blockedByTaskId ? p.steps.find(x=>x.id===s.blockedByTaskId) : null;
+        const parts = [];
+        if(blocker) parts.push('blocked by: '+blocker.text.slice(0,50));
+        if(s.blockedByNote) parts.push(s.blockedByNote);
+        return `<div class="tk-step-meta" style="color:var(--rust);">${escapeHtml(parts.join(' — '))}</div>`;
+      };
+      const emailGroups = groupStepsByPhase(emailSteps, p.phases);
+      const manualGroups = groupStepsByPhase(manualSteps, p.phases);
+
       const triageControls = (s)=> `
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">
           <span class="tk-triage-pill ${s.triageStatus==='new'?'active new':''}" data-triage="${s.id}" data-triage-val="new">New</span>
@@ -1162,31 +1246,39 @@ function render(){
 
         <div class="tk-box">
           <div class="tk-box-title">Emails <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
-          ${emailSteps.length ? emailSteps.map(s=>{
-            const srcResource = s.sourceResourceId ? state.resources.find(r=>r.id===s.sourceResourceId) : null;
-            return `
-            <div class="tk-triage-row">
-              ${s.sourceResourceId?`<span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;margin-top:3px;background:${mailboxColor(s.sourceResourceId)};border-radius:2px;"></span>`:''}
-              <div style="flex:1;">
-                <div style="font-size:13px;">${escapeHtml(s.text)}</div>
-                ${s.instructions?`<div class="tk-step-meta">${escapeHtml(s.instructions)}</div>`:''}
-                ${srcResource?`<div class="tk-step-meta">found in: ${escapeHtml(srcResource.name)}</div>`:''}
-                ${triageControls(s)}
+          ${emailGroups.length ? emailGroups.map(g=>`
+            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
+            ${g.items.map(s=>{
+              const srcResource = s.sourceResourceId ? state.resources.find(r=>r.id===s.sourceResourceId) : null;
+              return `
+              <div class="tk-triage-row">
+                ${s.sourceResourceId?`<span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;margin-top:3px;background:${mailboxColor(s.sourceResourceId)};border-radius:2px;"></span>`:''}
+                <div style="flex:1;">
+                  <div style="font-size:13px;">${escapeHtml(s.text)}${statusBadge(s)}</div>
+                  ${s.instructions?`<div class="tk-step-meta">${escapeHtml(s.instructions)}</div>`:''}
+                  ${srcResource?`<div class="tk-step-meta">found in: ${escapeHtml(srcResource.name)}</div>`:''}
+                  ${blockedHint(s)}
+                  ${triageControls(s)}
+                </div>
               </div>
-            </div>
-          `;}).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
+            `;}).join('')}
+          `).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
         </div>
 
         <div class="tk-box">
           <div class="tk-box-title">Tasks <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${manualSteps.length}</span></div>
-          ${manualSteps.length ? manualSteps.map(s=>`
-            <div class="tk-action-row">
-              <div class="tk-check" data-proj="${p.id}" data-step="${s.id}"></div>
-              <div>
-                <div class="tk-action-text">${escapeHtml(s.text)}${s.assignee?`<span class="tk-action-assignee">${escapeHtml(s.assignee)}</span>`:''}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}</div>
-                ${s.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(s.statusNote)}</div>`:''}
+          ${manualGroups.length ? manualGroups.map(g=>`
+            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
+            ${g.items.map(s=>`
+              <div class="tk-action-row">
+                <div class="tk-check" data-proj="${p.id}" data-step="${s.id}"></div>
+                <div>
+                  <div class="tk-action-text">${escapeHtml(s.text)}${statusBadge(s)}${s.assignee?`<span class="tk-action-assignee">${escapeHtml(s.assignee)}</span>`:''}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}</div>
+                  ${s.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(s.statusNote)}</div>`:''}
+                  ${blockedHint(s)}
+                </div>
               </div>
-            </div>
+            `).join('')}
           `).join('') : `<div class="tk-empty">No open tasks.</div>`}
         </div>
 
@@ -1256,6 +1348,18 @@ function render(){
               ${state.resources.filter(r=>!p.resourceIds.includes(r.id)).map(r=>`<span class="tk-chip-choice" data-resource="${r.id}">+ ${escapeHtml(r.name)}</span>`).join('')}
             </div>
 
+            <div class="tk-section-label" style="margin-top:20px;">Phases <span style="font-weight:400;">(group steps into stages, like MedCore's tracker)</span></div>
+            ${p.phases.map(ph=>`
+              <div class="tk-param-row">
+                <input class="tk-input" style="flex:1;" data-rename-phase="${ph.id}" value="${escapeHtml(ph.name)}" />
+                <span class="rm" data-del-phase="${ph.id}">&times;</span>
+              </div>
+            `).join('')}
+            <div class="tk-addstep">
+              <input class="tk-input" id="tk-addphase-input" placeholder="New phase name…" />
+              <button class="tk-btn ghost small" id="tk-addphase-btn">Add phase</button>
+            </div>
+
             <div class="tk-section-label" style="margin-top:20px;">Steps <span style="font-weight:400;">(full detail — instructions, status notes, handoff tags)</span></div>
             ${p.steps.map(s=>`
               <div class="tk-step-row">
@@ -1264,14 +1368,32 @@ function render(){
                   <div class="tk-step-text ${s.done?'done':''}">${escapeHtml(s.text)}${s.source==='email'?`<span class="tk-mbx-badge" title="${escapeHtml(state.resources.find(r=>r.id===s.sourceResourceId)?.name||'')}" style="${s.sourceResourceId?'border-color:'+mailboxColor(s.sourceResourceId)+';color:'+mailboxColor(s.sourceResourceId)+';':''}">via email${s.sourceResourceId?' — '+escapeHtml(state.resources.find(r=>r.id===s.sourceResourceId)?.name||''):''}</span>`:''}</div>
                   ${s.done && s.doneBy ? `<div class="tk-step-meta">done by ${escapeHtml(s.doneBy)} · ${fmtTime(s.doneAt)}</div>` : ''}
                   <div class="tk-step-inline">
+                    <select class="tk-select" style="font-size:11px;padding:4px 6px;" data-phase-step="${s.id}">
+                      <option value="">No phase</option>
+                      ${p.phases.map(ph=>`<option value="${ph.id}" ${s.phaseId===ph.id?'selected':''}>${escapeHtml(ph.name)}</option>`).join('')}
+                    </select>
+                    <select class="tk-select" style="font-size:11px;padding:4px 6px;color:${STATUS_META[s.status]?.color||'inherit'};" data-status-step="${s.id}">
+                      ${Object.entries(STATUS_META).map(([val,meta])=>`<option value="${val}" ${s.status===val?'selected':''}>${meta.label}</option>`).join('')}
+                    </select>
                     <input class="tk-input" data-assignee-step="${s.id}" placeholder="Assignee" value="${escapeHtml(s.assignee||'')}" />
-                    <input class="tk-date" type="date" data-due-step="${s.id}" value="${escapeHtml(s.dueDate||'')}" />
+                    <input class="tk-date" type="date" data-due-step="${s.id}" value="${escapeHtml(s.dueDate||'')}" title="Due date" />
                   </div>
                   <div class="tk-step-inline">
                     <input class="tk-input" style="width:100%;" data-instructions-step="${s.id}" placeholder="Instructions — what they need to do" value="${escapeHtml(s.instructions||'')}" />
                   </div>
                   <div class="tk-step-inline">
                     <input class="tk-input" style="width:100%;" data-statusnote-step="${s.id}" placeholder="Status / next action — e.g. pending ABR login" value="${escapeHtml(s.statusNote||'')}" />
+                  </div>
+                  <div class="tk-step-inline">
+                    <select class="tk-select" style="font-size:11px;padding:4px 6px;" data-blockedby-step="${s.id}">
+                      <option value="">Not blocked by another step</option>
+                      ${p.steps.filter(o=>o.id!==s.id).map(o=>`<option value="${o.id}" ${s.blockedByTaskId===o.id?'selected':''}>Blocked by: ${escapeHtml(o.text.slice(0,40))}</option>`).join('')}
+                    </select>
+                    <input class="tk-date" type="date" data-followup-step="${s.id}" value="${escapeHtml(s.followUpDate||'')}" title="Follow up / chase date" />
+                    <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);"><input type="checkbox" data-canproceed-step="${s.id}" ${s.canProceed?'checked':''} /> can proceed now</label>
+                  </div>
+                  <div class="tk-step-inline">
+                    <input class="tk-input" style="width:100%;" data-blockednote-step="${s.id}" placeholder="What's actually blocking this — e.g. waiting on Phillip's ABR access" value="${escapeHtml(s.blockedByNote||'')}" />
                   </div>
                   <div class="tk-step-inline">
                     <input class="tk-input" style="width:100%;" data-contexttag-step="${s.id}" placeholder="Handoff tag — e.g. When Phillip is in the office" value="${escapeHtml(s.contextTag||'')}" />
@@ -1554,6 +1676,18 @@ function attachHandlers(){
   document.querySelectorAll('[data-instructions-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.instructionsStep, 'instructions', e.target.value)));
   document.querySelectorAll('[data-statusnote-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.statusnoteStep, 'statusNote', e.target.value)));
   document.querySelectorAll('[data-contexttag-step]').forEach(el=> el.addEventListener('change', e=> updateStepField(state.openProjectId, el.dataset.contexttagStep, 'contextTag', e.target.value)));
+
+  document.querySelectorAll('[data-phase-step]').forEach(el=> el.addEventListener('change', e=> updateTaskField2(state.openProjectId, el.dataset.phaseStep, 'phaseId', 'phase_id', e.target.value)));
+  document.querySelectorAll('[data-status-step]').forEach(el=> el.addEventListener('change', e=> updateTaskStatus(state.openProjectId, el.dataset.statusStep, e.target.value)));
+  document.querySelectorAll('[data-blockedby-step]').forEach(el=> el.addEventListener('change', e=> updateTaskField2(state.openProjectId, el.dataset.blockedbyStep, 'blockedByTaskId', 'blocked_by_task_id', e.target.value)));
+  document.querySelectorAll('[data-blockednote-step]').forEach(el=> el.addEventListener('change', e=> updateTaskField2(state.openProjectId, el.dataset.blockednoteStep, 'blockedByNote', 'blocked_by_note', e.target.value)));
+  document.querySelectorAll('[data-followup-step]').forEach(el=> el.addEventListener('change', e=> updateTaskField2(state.openProjectId, el.dataset.followupStep, 'followUpDate', 'follow_up_date', e.target.value)));
+  document.querySelectorAll('[data-canproceed-step]').forEach(el=> el.addEventListener('change', e=> updateTaskField2(state.openProjectId, el.dataset.canproceedStep, 'canProceed', 'can_proceed', e.target.checked)));
+
+  const addPhaseBtn = document.getElementById('tk-addphase-btn');
+  if(addPhaseBtn) addPhaseBtn.addEventListener('click', ()=> addPhase(state.openProjectId, document.getElementById('tk-addphase-input').value));
+  document.querySelectorAll('[data-rename-phase]').forEach(el=> el.addEventListener('change', e=> renamePhase(state.openProjectId, el.dataset.renamePhase, e.target.value)));
+  document.querySelectorAll('[data-del-phase]').forEach(el=> el.addEventListener('click', ()=> deletePhase(state.openProjectId, el.dataset.delPhase)));
 
   document.querySelectorAll('[data-unlink]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.unlink)));
   document.querySelectorAll('[data-link]').forEach(el=> el.addEventListener('click', ()=> toggleLink(state.openProjectId, el.dataset.link)));
