@@ -142,6 +142,8 @@ textarea.tk-textarea{width:100%;font-family:inherit;}
 .tk-cal-group.overdue .tk-section-label{color:var(--rust);}
 .tk-cal-filter{display:flex;gap:8px;align-items:center;margin-bottom:20px;}
 .tk-panel-tabs{display:flex;gap:2px;margin:14px 0 18px;border-bottom:1px solid var(--rule-soft);}
+.tk-settings-link{background:none;border:none;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;padding:4px 8px;white-space:nowrap;}
+.tk-settings-link:hover{color:var(--ink);}
 .tk-panel-tab{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;padding:8px 4px;margin-right:20px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;user-select:none;}
 .tk-panel-tab.active{color:var(--ink);border-bottom-color:var(--brass);}
 .tk-box{border:1px solid var(--rule);padding:12px 14px;margin-bottom:16px;background:var(--paper-raised);}
@@ -187,7 +189,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 03:59 UTC';
+const BUILD_VERSION = '2026-07-10 04:21 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -1305,7 +1307,7 @@ function render(){
       const otherProjects = state.projects.filter(x=>x.id!==p.id);
       const brief = generateBrief(p);
       const emailSteps = p.steps.filter(s=>s.source==='email' && !s.done);
-      const manualSteps = p.steps.filter(s=>s.source!=='email' && !s.done);
+      const manualSteps = p.steps.slice();
       const linkedMailboxes = p.resourceIds.map(rid=>state.resources.find(r=>r.id===rid)).filter(r=>r && r.type==='mailbox');
       const deadlines = p.steps.filter(s=>!s.done && s.dueDate).sort((a,b)=> new Date(a.dueDate)-new Date(b.dueDate)).slice(0,3);
 
@@ -1339,56 +1341,6 @@ function render(){
         </div>
 
         <div class="tk-box">
-          <div class="tk-box-title">Emails <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
-          ${emailGroups.length ? emailGroups.map(g=>`
-            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
-            ${g.items.map(s=>{
-              const srcResource = s.sourceResourceId ? state.resources.find(r=>r.id===s.sourceResourceId) : null;
-              return `
-              <div class="tk-triage-row">
-                ${s.sourceResourceId?`<span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;margin-top:3px;background:${mailboxColor(s.sourceResourceId)};border-radius:2px;"></span>`:''}
-                <div style="flex:1;">
-                  <div style="font-size:13px;">${escapeHtml(s.text)}${statusBadge(s)}</div>
-                  ${s.instructions?`<div class="tk-step-meta">${escapeHtml(s.instructions)}</div>`:''}
-                  ${srcResource?`<div class="tk-step-meta">found in: ${escapeHtml(srcResource.name)}</div>`:''}
-                  ${blockedHint(s)}
-                  ${triageControls(s)}
-                </div>
-              </div>
-            `;}).join('')}
-          `).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
-        </div>
-
-        <div class="tk-box">
-          <div class="tk-box-title">Tasks <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${manualSteps.length}</span></div>
-          ${manualGroups.length ? manualGroups.map(g=>`
-            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
-            ${g.items.map(s=>`
-              <div class="tk-action-row">
-                <div class="tk-check" data-proj="${p.id}" data-step="${s.id}"></div>
-                <div>
-                  <div class="tk-action-text">${escapeHtml(s.text)}${statusBadge(s)}${s.assignee?`<span class="tk-action-assignee">${escapeHtml(s.assignee)}</span>`:''}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}</div>
-                  ${s.statusNote?`<div class="tk-step-meta">status: ${escapeHtml(s.statusNote)}</div>`:''}
-                  ${blockedHint(s)}
-                </div>
-              </div>
-            `).join('')}
-          `).join('') : `<div class="tk-empty">No open tasks.</div>`}
-        </div>
-
-        ${linkedMailboxes.length ? `
-        <div class="tk-box">
-          <div class="tk-box-title">Mailbox activity</div>
-          ${linkedMailboxes.map(r=>`
-            <div class="tk-mbx-activity-row">
-              <span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;background:${mailboxColor(r.id)};border-radius:2px;"></span>
-              <span style="flex:1;">${escapeHtml(r.name)}</span>
-              <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;">${escapeHtml(fmtAgo(r.lastChecked))}</span>
-            </div>
-          `).join('')}
-        </div>` : ''}
-
-        <div class="tk-box">
           <div class="tk-box-title">Knowledge base <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${p.knowledge.length + state.globalKnowledge.length}</span></div>
           ${(p.knowledge.length || state.globalKnowledge.length) ? `
             ${p.knowledge.map(k=>`
@@ -1411,6 +1363,66 @@ function render(){
             <button class="tk-btn ghost small" id="tk-kn-add">Add</button>
           </div>
         </div>
+
+        <div class="tk-box">
+          <div class="tk-box-title">Tell it what you did <span style="font-weight:400;font-family:'Inter',sans-serif;font-size:11px;">it figures out what changed</span></div>
+          <div class="tk-add-update">
+            <textarea class="tk-textarea" id="tk-detail-update-text" placeholder="e.g. Called Clinpath and got the FetchAPI credentials, so the polling cron can start"></textarea>
+            <div style="display:flex;justify-content:flex-end;">
+              <button class="tk-btn small" id="tk-detail-update-btn">${state.updateInFlight ? 'Updating…' : 'Update'}</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tk-box">
+          <div class="tk-box-title">Needs triage (from email) <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${emailSteps.length}</span></div>
+          ${emailGroups.length ? emailGroups.map(g=>`
+            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
+            ${g.items.map(s=>{
+              const srcResource = s.sourceResourceId ? state.resources.find(r=>r.id===s.sourceResourceId) : null;
+              return `
+              <div class="tk-triage-row">
+                ${s.sourceResourceId?`<span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;margin-top:3px;background:${mailboxColor(s.sourceResourceId)};border-radius:2px;"></span>`:''}
+                <div style="flex:1;">
+                  <div style="font-size:13px;">${escapeHtml(s.text)}${statusBadge(s)}</div>
+                  ${s.instructions?`<div class="tk-step-meta">${escapeHtml(s.instructions)}</div>`:''}
+                  ${srcResource?`<div class="tk-step-meta">found in: ${escapeHtml(srcResource.name)}</div>`:''}
+                  ${blockedHint(s)}
+                  ${triageControls(s)}
+                </div>
+              </div>
+            `;}).join('')}
+          `).join('') : `<div class="tk-empty">No unprocessed emails for this project right now.</div>`}
+        </div>
+
+        <div class="tk-box">
+          <div class="tk-box-title">Full plan <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${manualSteps.filter(s=>!s.done).length} open of ${manualSteps.length}</span></div>
+          ${manualGroups.length ? manualGroups.map(g=>`
+            ${g.label ? `<div class="tk-user-label" style="margin:10px 0 4px;">${escapeHtml(g.label)}</div>` : ''}
+            ${g.items.map(s=>`
+              <div class="tk-action-row">
+                <div class="tk-check ${s.done?'done':''}" data-proj="${p.id}" data-step="${s.id}"></div>
+                <div>
+                  <div class="tk-action-text" style="${s.done?'color:var(--muted);':''}">${escapeHtml(s.text)}${statusBadge(s)}${s.assignee?`<span class="tk-action-assignee">${escapeHtml(s.assignee)}</span>`:''}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}${s.source==='email'?`<span class="tk-mbx-badge" style="${s.sourceResourceId?'border-color:'+mailboxColor(s.sourceResourceId)+';color:'+mailboxColor(s.sourceResourceId)+';':''}">email</span>`:''}</div>
+                  ${s.statusNote?`<div class="tk-step-meta">${escapeHtml(s.statusNote).replace(/\n/g,'<br>')}</div>`:''}
+                  ${blockedHint(s)}
+                </div>
+              </div>
+            `).join('')}
+          `).join('') : `<div class="tk-empty">No steps yet.</div>`}
+        </div>
+
+        ${linkedMailboxes.length ? `
+        <div class="tk-box">
+          <div class="tk-box-title">Mailbox activity</div>
+          ${linkedMailboxes.map(r=>`
+            <div class="tk-mbx-activity-row">
+              <span style="display:inline-block;width:10px;height:10px;flex:0 0 10px;background:${mailboxColor(r.id)};border-radius:2px;"></span>
+              <span style="flex:1;">${escapeHtml(r.name)}</span>
+              <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;">${escapeHtml(fmtAgo(r.lastChecked))}</span>
+            </div>
+          `).join('')}
+        </div>` : ''}
 
         <div class="tk-box">
           <div class="tk-box-title">Ledger</div>
@@ -1526,14 +1538,7 @@ function render(){
               <button class="tk-btn ghost small" id="tk-addstep-btn">Add</button>
             </div>
 
-            <div class="tk-section-label" style="margin-top:24px;">Tell it what you did <span style="font-weight:400;">— it figures out what changed</span></div>
-            <div class="tk-add-update">
-              <textarea class="tk-textarea" id="tk-detail-update-text" placeholder="e.g. Called Clinpath and got the FetchAPI credentials, so the polling cron can start"></textarea>
-              <div style="display:flex;justify-content:flex-end;">
-                <button class="tk-btn small" id="tk-detail-update-btn">${state.updateInFlight ? 'Updating…' : 'Update'}</button>
-              </div>
-            </div>
-            <div class="tk-note">The Summary tab is the day-to-day view — this Settings tab is for editing structure: renaming, deleting, linking, and per-step detail.</div>
+            <div class="tk-note">To log progress, use "Tell it what you did" on the Plan view — this Settings screen is just for structure: renaming, deleting, linking, and per-step detail you rarely touch once set up.</div>
       `;
 
       overlay = `
@@ -1544,11 +1549,8 @@ function render(){
                 <span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${projectColor(p.id)};margin-right:9px;vertical-align:middle;flex:0 0 11px;"></span>
                 <input class="tk-panel-title-input" data-rename-project="${p.id}" value="${escapeHtml(p.name)}" />
               </div>
+              <button class="tk-settings-link" id="tk-panel-settings-link" title="Rename, delete, linking, per-step detail — set-up stuff you rarely need day to day">${state.projectPanelTab==='settings' ? '← Back to plan' : '⚙ Settings'}</button>
               <button class="tk-close" id="tk-panel-close">&times;</button>
-            </div>
-            <div class="tk-panel-tabs">
-              <div class="tk-panel-tab ${state.projectPanelTab==='summary'?'active':''}" data-panel-tab="summary">Summary</div>
-              <div class="tk-panel-tab ${state.projectPanelTab==='settings'?'active':''}" data-panel-tab="settings">Settings</div>
             </div>
             ${state.projectPanelTab==='summary' ? summaryContent : settingsContent}
           </div>
@@ -1727,7 +1729,8 @@ function attachHandlers(){
   const panelOverlay = document.getElementById('tk-panel-overlay');
   if(panelOverlay) panelOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-panel-overlay'){ state.openProjectId = null; state.confirmDeleteProject = false; render(); } });
 
-  document.querySelectorAll('[data-panel-tab]').forEach(el=> el.addEventListener('click', ()=>{ state.projectPanelTab = el.dataset.panelTab; render(); }));
+  const settingsLink = document.getElementById('tk-panel-settings-link');
+  if(settingsLink) settingsLink.addEventListener('click', ()=>{ state.projectPanelTab = state.projectPanelTab==='settings' ? 'summary' : 'settings'; render(); });
 
   document.querySelectorAll('[data-triage]').forEach(el=>{
     el.addEventListener('click', ()=>{
