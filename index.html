@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<html lang="en"> 
-<head> 
+<html lang="en">
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Organiser — Ops Tracker</title>
@@ -69,6 +69,8 @@ select.tk-select{cursor:pointer;}
 .tk-two-col{display:grid;grid-template-columns:1.15fr 0.85fr;gap:32px;}
 @media (max-width:800px){.tk-two-col{grid-template-columns:1fr;}}
 .tk-ledger-entry{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--rule-soft);}
+.tk-ledger-del{background:none;border:none;color:var(--muted-2);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;flex:0 0 auto;align-self:flex-start;}
+.tk-ledger-del:hover{color:var(--rust);}
 .tk-stamp{flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.03em;border:1.5px solid var(--brass);color:var(--brass);padding:3px 6px;border-radius:3px;white-space:nowrap;height:fit-content;transform:rotate(var(--tilt,-2deg));text-transform:uppercase;}
 .tk-stamp.system{border-color:var(--teal);color:var(--teal);}
 .tk-ledger-text{font-size:13px;line-height:1.45;}
@@ -171,7 +173,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-09 06:39 UTC';
+const BUILD_VERSION = '2026-07-10 00:39 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -433,6 +435,11 @@ async function addUpdate(projectId, text, type, user){
     const [row] = await sbInsert('updates', [{project_id:projectId, type:local.type, text:local.text, user_name:local.user}]);
     local.id = row.id; local.ts = new Date(row.ts).getTime();
   }catch(e){ console.error('addUpdate failed', e); }
+}
+function deleteUpdate(id){
+  state.updates = state.updates.filter(u=>u.id!==id);
+  render();
+  sbDelete('updates', 'id=eq.'+id).catch(e=> console.error('deleteUpdate failed', e));
 }
 
 async function markStep(projectId, stepId, done){
@@ -1177,10 +1184,11 @@ function renderLedgerEntry(u, showProject){
   return `
     <div class="tk-ledger-entry">
       <div class="tk-stamp ${u.type==='system'?'system':''}" style="--tilt:${tiltFor(u.id)}">${escapeHtml(initials(u.user))}<br/>${fmtTime(u.ts)}</div>
-      <div>
+      <div style="flex:1;min-width:0;">
         <div class="tk-ledger-text">${showProject && proj ? `<span class="tk-action-proj" data-open="${proj.id}" style="color:${projectColor(proj.id)};text-decoration-color:${projectColor(proj.id)};">${escapeHtml(proj.name)}</span>` : ''}${escapeHtml(u.text)}</div>
         <div class="tk-ledger-meta">${escapeHtml(u.user)}${u.type==='system'?' · automated':''}</div>
       </div>
+      <button class="tk-ledger-del" data-del-update="${u.id}" title="Delete this entry">&times;</button>
     </div>`;
 }
 
@@ -1334,6 +1342,7 @@ function attachHandlers(){
   if(nrOverlay) nrOverlay.addEventListener('click', (e)=>{ if(e.target.id==='tk-newres-overlay'){ state.showNewResource=false; render(); } });
   document.querySelectorAll('[data-del-res]').forEach(el=> el.addEventListener('click', ()=> deleteResource(el.dataset.delRes)));
   document.querySelectorAll('[data-connect-mbx]').forEach(el=> el.addEventListener('click', ()=> connectMailbox(el.dataset.connectMbx)));
+  document.querySelectorAll('[data-del-update]').forEach(el=> el.addEventListener('click', ()=> deleteUpdate(el.dataset.delUpdate)));
 
   const impCancel = document.getElementById('tk-import-cancel');
   if(impCancel) impCancel.addEventListener('click', ()=>{ state.showImport = false; state.importError=''; render(); });
