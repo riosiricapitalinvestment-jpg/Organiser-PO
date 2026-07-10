@@ -201,7 +201,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 05:56 UTC';
+const BUILD_VERSION = '2026-07-10 06:25 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -212,6 +212,7 @@ const GOOGLE_CLIENT_ID = '696960566917-75kc3k9pknnsb1bg7ecj3aerso871k8b.apps.goo
 const GMAIL_REDIRECT_URI = SUPABASE_URL + '/functions/v1/gmail-oauth-callback';
 const APPLY_UPDATE_URL = SUPABASE_URL + '/functions/v1/apply-update';
 const SEARCH_MAILBOX_URL = SUPABASE_URL + '/functions/v1/search-mailbox';
+const ADD_MAIL_FILTER_URL = SUPABASE_URL + '/functions/v1/add-mail-filter';
 const UPDATE_SECRET = '7zDap7wHovik6rVqHIyQ/s1baq1SIIho';
 function buildGoogleAuthUrl(resourceId){
   const params = new URLSearchParams({
@@ -313,7 +314,7 @@ const SEED_UPDATE_TEXT = {
 const SEED_USERS = ['You','Emma'];
 
 let state = {
-  projects: [], updates: [], resources: [], invoices: [], globalKnowledge: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
+  projects: [], updates: [], resources: [], invoices: [], globalKnowledge: [], mailFilters: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
   tab: 'digest', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
   justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary', updateInFlight: false,
@@ -436,6 +437,12 @@ async function loadAll(){
       knowledgeAllRows = [];
     }
     state.globalKnowledge = knowledgeAllRows.filter(k=>!k.project_id).map(k=>({id:k.id, title:k.title, content:k.content, source:k.source||'manual'}));
+    try{
+      state.mailFilters = await sbSelect('mail_filters', 'select=*&order=created_at.desc');
+    }catch(e){
+      console.error('mail_filters table not available yet', e);
+      state.mailFilters = [];
+    }
 
     const mbxByResource = {};
     (mbxRows||[]).forEach(m=> mbxByResource[m.resource_id] = m);
@@ -467,6 +474,7 @@ async function loadAll(){
         id:x.id, text:x.text, done:x.done, doneBy:x.done_by, doneAt: x.done_at ? new Date(x.done_at).getTime() : null,
         assignee:x.assignee||'', dueDate:x.due_date||'', instructions:x.instructions||'', statusNote:x.status_note||'', contextTag:x.context_tag||'',
         source:x.source||'manual', sourceResourceId:x.source_resource_id||null, triageStatus:x.triage_status||'new',
+        sourceSender:x.source_sender||null,
         createdAt: x.created_at ? new Date(x.created_at).getTime() : null,
         status: x.status || (x.done ? 'done' : 'todo'), phaseId: x.phase_id||null,
         blockedByTaskId: x.blocked_by_task_id||null, blockedByNote: x.blocked_by_note||'',
@@ -555,6 +563,31 @@ async function searchMailbox(projectId, query){
   state.searchInFlight = false;
   render();
   if(state.searchResult && state.searchResult.ok) await loadAll();
+}
+function deleteMailFilter(id){
+  state.mailFilters = state.mailFilters.filter(f=>f.id!==id);
+  render();
+  sbDelete('mail_filters', 'id=eq.'+id).catch(e=> console.error('deleteMailFilter failed', e));
+}
+async function filterMailSender(taskId, scope){
+  try{
+    const res = await fetch(ADD_MAIL_FILTER_URL, {
+      method:'POST',
+      headers: {'Content-Type':'application/json', 'x-update-secret': UPDATE_SECRET},
+      body: JSON.stringify({ task_id: taskId, scope, user: state.currentUser })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      console.error('filterMailSender failed', data);
+      state.oauthBanner = {kind:'bad', text:'Could not add filter: ' + (data.detail || data.error || res.status)};
+    } else {
+      state.oauthBanner = {kind:'good', text: data.summary || 'Filter added.'};
+    }
+  }catch(e){
+    console.error('filterMailSender exception', e);
+    state.oauthBanner = {kind:'bad', text:'Could not reach the filter function: ' + e.message};
+  }
+  await loadAll();
 }
 async function addUpdate(projectId, text, type, user){
   if(!text || !text.trim()) return;
@@ -1316,6 +1349,16 @@ function render(){
                 </div>
               `).join('') : `<div class="tk-empty">No emails routed from this mailbox yet.</div>`}
             </div>
+            ${(()=>{ const filtersHere = state.mailFilters.filter(f=>f.resource_id===r.id); return filtersHere.length ? `
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-soft);">
+              <div class="tk-user-label" style="margin-bottom:6px;">filtered</div>
+              ${filtersHere.map(f=>`
+                <div class="tk-res-row">
+                  <div style="font-size:12px;">${f.pattern_type==='sender_domain'?'domain: ':'sender: '}${escapeHtml(f.pattern_value)}</div>
+                  <span class="rm" data-del-filter="${f.id}">&times;</span>
+                </div>
+              `).join('')}
+            </div>` : ''; })()}
           </div>`;
       }).join('') : `<div class="tk-empty">No mailboxes yet — add one from the Resources tab.</div>`}
     `;
@@ -1425,6 +1468,7 @@ function render(){
           <span class="tk-triage-pill ${s.triageStatus==='waiting'?'active waiting':''}" data-triage="${s.id}" data-triage-val="waiting">Waiting</span>
           ${s.triageStatus==='waiting' ? `<input class="tk-date" type="date" style="width:126px;" data-triage-wait="${s.id}" value="${escapeHtml(s.dueDate||'')}" />` : ''}
           <button class="tk-btn ghost small" data-detail-step="${s.id}" style="margin-left:auto;">Mark done</button>
+          ${s.sourceSender ? `<button class="tk-btn ghost small" data-filter-sender="${s.id}" style="color:var(--rust);border-color:var(--rust);" title="Stop future emails from ${escapeHtml(s.sourceSender)} appearing here">Filter sender</button>` : ''}
         </div>`;
 
       const summaryContent = `
@@ -1516,6 +1560,7 @@ function render(){
                   ${s.done && s.doneBy?`<div class="tk-step-meta">done by ${escapeHtml(s.doneBy)}${s.doneAt?' · '+fmtDate(s.doneAt):''}</div>`:''}
                   ${!s.done ? blockedHint(s) : ''}
                   ${!s.done ? `<button class="tk-btn ghost small" data-help-step="${s.id}" style="margin-top:5px;">Help me with this</button>` : ''}
+                  ${!s.done && s.sourceSender ? `<button class="tk-btn ghost small" data-filter-sender="${s.id}" style="margin-top:5px;color:var(--rust);border-color:var(--rust);" title="Stop future emails from ${escapeHtml(s.sourceSender)} appearing here">Filter sender</button>` : ''}
                 </div>
               </div>
             `).join('')}
@@ -1995,6 +2040,9 @@ function attachHandlers(){
       }).catch(()=>{});
     }
   }));
+
+  document.querySelectorAll('[data-filter-sender]').forEach(el=> el.addEventListener('click', ()=> filterMailSender(el.dataset.filterSender, 'sender')));
+  document.querySelectorAll('[data-del-filter]').forEach(el=> el.addEventListener('click', ()=> deleteMailFilter(el.dataset.delFilter)));
 
   const helpStepTextarea = document.getElementById('tk-helpstep-text');
   if(helpStepTextarea) helpStepTextarea.addEventListener('click', ()=> helpStepTextarea.select());
