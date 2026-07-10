@@ -187,7 +187,7 @@ const RESOURCE_TYPES = [
 // Bumped by hand every time a new version of this file is generated —
 // compare this against what's stated in chat to confirm you're not looking
 // at a cached copy. Shown in the top bar.
-const BUILD_VERSION = '2026-07-10 03:47 UTC';
+const BUILD_VERSION = '2026-07-10 03:59 UTC';
 
 const SUPABASE_URL = 'https://aaivtuqsxoejpktqsmzu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_PkIaGvI112cpvfZBJSlG4A_YmPSP6f2';
@@ -299,7 +299,7 @@ const SEED_USERS = ['You','Emma'];
 
 let state = {
   projects: [], updates: [], resources: [], invoices: [], globalKnowledge: [], users: DEFAULT_USERS.slice(), currentUser: 'You',
-  tab: 'today', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
+  tab: 'digest', openProjectId: null, showNewProject: false, showNewUser: false, showNewResource: false,
   showImport: false, importText: '', importError: '', calFilter: 'all', todayFilter: 'all',
   justCopied: false, loadError: null, oauthBanner: null, confirmDeleteProject: false, projectPanelTab: 'summary', updateInFlight: false
 };
@@ -952,6 +952,7 @@ function render(){
 
   const tabs = `
     <div class="tk-tabs">
+      <div class="tk-tab ${state.tab==='digest'?'active':''}" data-tab="digest">Digest</div>
       <div class="tk-tab ${state.tab==='today'?'active':''}" data-tab="today">Today</div>
       <div class="tk-tab ${state.tab==='calendar'?'active':''}" data-tab="calendar">Calendar</div>
       <div class="tk-tab ${state.tab==='handoffs'?'active':''}" data-tab="handoffs">Handoffs</div>
@@ -986,7 +987,43 @@ function render(){
     </div>`;
 
   let body = '';
-  if(state.tab==='today'){
+  if(state.tab==='digest'){
+    const allOpen = [];
+    state.projects.filter(p=>p.status!=='done').forEach(p=> p.steps.filter(s=>!s.done).forEach(s=> allOpen.push({...s, projectId:p.id, projectName:p.name})));
+    const doableNow = allOpen.filter(s=> s.canProceed!==false);
+    const blockedExternal = allOpen.filter(s=> s.canProceed===false);
+    const byPerson = {};
+    allOpen.forEach(s=>{ if(s.assignee && s.assignee.trim()) (byPerson[s.assignee] ||= []).push(s); });
+
+    const renderDigestList = (items)=> items.length ? items.map(s=>`
+      <div class="tk-action-row">
+        <div class="tk-check" data-proj="${s.projectId}" data-step="${s.id}"></div>
+        <div>
+          <div class="tk-action-text"><span class="tk-action-proj" data-open="${s.projectId}" style="color:${projectColor(s.projectId)};text-decoration-color:${projectColor(s.projectId)};">${escapeHtml(s.projectName)}</span>${escapeHtml(s.text)}${s.dueDate?`<span class="tk-action-due">due ${fmtDueDate(s.dueDate)}</span>`:''}</div>
+          ${s.statusNote?`<div class="tk-step-meta">${escapeHtml(s.statusNote.split('\n').slice(-1)[0])}</div>`:''}
+          ${s.blockedByNote?`<div class="tk-step-meta" style="color:var(--rust);">blocked: ${escapeHtml(s.blockedByNote)}</div>`:''}
+        </div>
+      </div>
+    `).join('') : `<div class="tk-empty">Nothing here right now.</div>`;
+
+    body = `
+      <div class="tk-note" style="margin-top:0;">One place, every project — what's actually doable today, what's stuck waiting on someone else, and what's specifically waiting on a named person.</div>
+      <div class="tk-box" style="border-left:4px solid #3d7a4f;">
+        <div class="tk-box-title">Can do today <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${doableNow.length}</span></div>
+        ${renderDigestList(doableNow)}
+      </div>
+      <div class="tk-box" style="border-left:4px solid var(--rust);">
+        <div class="tk-box-title">Blocked / waiting on external <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${blockedExternal.length}</span></div>
+        ${renderDigestList(blockedExternal)}
+      </div>
+      ${Object.keys(byPerson).length ? Object.entries(byPerson).map(([person, items])=>`
+        <div class="tk-box" style="border-left:4px solid var(--brass);">
+          <div class="tk-box-title">Needs ${escapeHtml(person)} <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--muted);">${items.length}</span></div>
+          ${renderDigestList(items)}
+        </div>
+      `).join('') : ''}
+    `;
+  } else if(state.tab==='today'){
     const actions = [];
     openProjects.forEach(p=>{ p.steps.filter(s=>!s.done).forEach(s=> actions.push({proj:p, step:s})); });
     const filteredActions = state.todayFilter==='all' ? actions : actions.filter(a=> a.step.assignee === state.todayFilter);
